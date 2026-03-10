@@ -78,7 +78,7 @@ export function Landing() {
           </div>
 
           <Button 
-            onClick={() => navigate('/onboarding/welcome')}
+onClick={() => navigate('/onboarding/welcome')}
             size="lg"
             className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white px-12 py-6 text-lg rounded-full shadow-lg hover:shadow-xl transition-all"
           >
