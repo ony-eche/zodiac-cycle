@@ -9,7 +9,6 @@ import { useTranslation } from 'react-i18next';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const PRICE_ID_TRIAL   = import.meta.env.VITE_STRIPE_PRICE_ID_TRIAL;
 const PRICE_ID_MONTHLY = import.meta.env.VITE_STRIPE_PRICE_ID_MONTHLY;
@@ -140,6 +139,7 @@ export function Paywall() {
   const [loadingIntent, setLoadingIntent] = useState(false);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
+  const [stripePromise, setStripePromise] = useState<ReturnType<typeof loadStripe> | null>(null);
 
   // Currency detection — runs once on mount
   useEffect(() => {
@@ -167,6 +167,11 @@ export function Paywall() {
       return;
     }
     if (!selected || !currency) return;
+
+    // Load Stripe only when user actually tries to pay
+    if (!stripePromise) {
+      setStripePromise(loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY));
+    }
 
     const priceId = selected === 'trial' ? PRICE_ID_TRIAL : PRICE_ID_MONTHLY;
 
