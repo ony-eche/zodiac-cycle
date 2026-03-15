@@ -1,60 +1,60 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { ZodiacCycleLogo } from '../../components/ZodiacCycleLogo';
-import { Loader2, Sparkles } from 'lucide-react';
+import { useUserData } from '../../context/UserDataContext';
+import { getNatalChartFromAPI } from '../../../lib/prokerala';
+import { getNatalChart } from '../../../lib/astrology';
+import { useTranslation } from 'react-i18next';
 
 export function Calculating() {
   const navigate = useNavigate();
+  const { userData, updateUserData } = useUserData();
+  const { t } = useTranslation();
+  const hasRun = useRef(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      navigate('/onboarding/paywall');
-    }, 3000);
+    if (hasRun.current) return;
+    hasRun.current = true;
 
-    return () => clearTimeout(timer);
-  }, [navigate]);
+    async function calculate() {
+      const birthDate = userData.dateOfBirth ? new Date(userData.dateOfBirth) : new Date();
+      const birthTime = userData.timeOfBirth || 'unknown';
+      const lat = userData.birth_lat || 0;
+      const lng = userData.birth_lng || 0;
+
+      try {
+        const chart = await getNatalChartFromAPI(birthDate, birthTime, lat, lng);
+        updateUserData({
+          sun_sign: chart.sun, moon_sign: chart.moon, rising_sign: chart.rising,
+          venus_sign: chart.venus, mars_sign: chart.mars, mercury_sign: chart.mercury,
+          jupiter_sign: chart.jupiter, saturn_sign: chart.saturn, houses: chart.houses,
+        });
+      } catch (err) {
+        const chart = getNatalChart(birthDate, birthTime, lat, lng);
+        updateUserData({
+          sun_sign: chart.sun, moon_sign: chart.moon, rising_sign: chart.rising,
+          venus_sign: chart.venus, mars_sign: chart.mars, mercury_sign: chart.mercury,
+          houses: chart.houses,
+        });
+      }
+
+      setTimeout(() => navigate('/onboarding/paywall'), 1500);
+    }
+
+    calculate();
+  }, []);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6">
-      <div className="w-full max-w-md space-y-12 text-center">
-        <ZodiacCycleLogo className="justify-center" />
-        
-        <div className="space-y-6">
-          <div className="relative">
-            <div className="flex justify-center">
-              <div className="relative">
-                <Loader2 className="w-16 h-16 text-primary animate-spin" />
-                <Sparkles className="w-8 h-8 text-secondary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <h1 className="text-3xl">Calculating your cosmic blueprint...</h1>
-            
-            <div className="space-y-2 text-muted-foreground">
-              <p className="flex items-center justify-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                Mapping planetary positions
-              </p>
-              <p className="flex items-center justify-center gap-2" style={{ animationDelay: '0.5s' }}>
-                <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
-                Analyzing your birth chart
-              </p>
-              <p className="flex items-center justify-center gap-2" style={{ animationDelay: '1s' }}>
-                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                Predicting cycle patterns
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-card border border-border rounded-2xl p-6">
-          <p className="text-xs text-muted-foreground">
-            <strong className="block mb-2">Medical Disclaimer</strong>
-            ZodiacCycle provides wellness insights based on astrology and cycle tracking. 
-            It is not a medical diagnostic tool.
-          </p>
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
+      <div className="text-center space-y-6">
+        <div className="text-6xl animate-pulse">✦</div>
+        <h2 className="text-2xl font-medium">{t('onboarding.calculating.title')}</h2>
+        <p className="text-muted-foreground text-sm">{t('onboarding.calculating.subtitle')}</p>
+        <div className="flex justify-center gap-2 mt-4">
+          {['☀️', '🌙', '⬆️', '♀️', '♂️', '☿'].map((planet, i) => (
+            <span key={i} className="text-xl animate-bounce" style={{ animationDelay: `${i * 0.15}s` }}>
+              {planet}
+            </span>
+          ))}
         </div>
       </div>
     </div>
