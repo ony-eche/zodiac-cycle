@@ -55,9 +55,10 @@ function PaymentForm({ onSuccess, onCancel, currency }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
-      <div className="glass-heavy w-full max-w-lg rounded-t-3xl p-6 border-t border-white/40 space-y-5 max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-
+      <div
+        className="glass-heavy w-full max-w-lg rounded-t-3xl p-6 border-t border-white/40 space-y-5 max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="w-12 h-1.5 rounded-full bg-border/50 mx-auto"/>
 
         <div className="flex items-center justify-between">
@@ -106,8 +107,11 @@ function PaymentForm({ onSuccess, onCancel, currency }: {
             </div>
           )}
 
-          <button type="submit" disabled={!stripe || loading || !ready}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold btn-glow flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+          <button
+            type="submit"
+            disabled={!stripe || loading || !ready}
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold btn-glow flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             {loading
               ? <><Loader2 className="w-5 h-5 animate-spin"/> Processing...</>
               : <><Check className="w-5 h-5"/> Pay {currency.symbol}{currency.trialPrice} {currency.code}</>
@@ -137,6 +141,7 @@ export function Paywall() {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [stripeCustomerId, setStripeCustomerId] = useState<string | null>(null);
 
+  // Currency detection — runs once on mount
   useEffect(() => {
     const load = async () => {
       setLoadingCurrency(true);
@@ -234,10 +239,12 @@ export function Paywall() {
 
         <div className="space-y-3">
           {/* Trial plan */}
-          <button onClick={() => setSelected('trial')}
+          <button
+            onClick={() => setSelected('trial')}
             className={`w-full text-left glass glossy-hover rounded-3xl p-6 transition-all border-2 ${
               selected === 'trial' ? 'border-primary shadow-lg scale-[1.01]' : 'border-white/30 hover:border-primary/30'
-            }`}>
+            }`}
+          >
             <div className="flex items-start justify-between mb-3">
               <div>
                 <div className="flex items-baseline gap-2">
@@ -274,10 +281,12 @@ export function Paywall() {
           </button>
 
           {/* Monthly plan */}
-          <button onClick={() => setSelected('monthly')}
+          <button
+            onClick={() => setSelected('monthly')}
             className={`w-full text-left glass rounded-3xl p-5 transition-all border-2 ${
               selected === 'monthly' ? 'border-primary shadow-md' : 'border-white/30 hover:border-primary/30'
-            }`}>
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-baseline gap-2">
@@ -299,10 +308,12 @@ export function Paywall() {
           </button>
 
           {/* Free plan */}
-          <button onClick={() => setSelected('free')}
+          <button
+            onClick={() => setSelected('free')}
             className={`w-full text-left glass rounded-3xl p-5 transition-all border-2 ${
               selected === 'free' ? 'border-primary shadow-md' : 'border-white/20 hover:border-primary/20'
-            }`}>
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-semibold">{t('paywall.free')}</p>
@@ -326,8 +337,11 @@ export function Paywall() {
           </div>
         )}
 
-        <Button onClick={handleGetAccess} disabled={!selected || loadingCurrency || loadingIntent}
-          className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white py-4 rounded-2xl text-lg font-bold btn-glow disabled:opacity-40">
+        <Button
+          onClick={handleGetAccess}
+          disabled={!selected || loadingCurrency || loadingIntent}
+          className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white py-4 rounded-2xl text-lg font-bold btn-glow disabled:opacity-40"
+        >
           {loadingIntent
             ? <><Loader2 className="w-5 h-5 animate-spin mr-2"/> Setting up payment...</>
             : selected === 'trial'   ? t('paywall.cta')
