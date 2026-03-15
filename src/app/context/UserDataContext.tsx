@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 export interface UserData {
   name?: string;
   email?: string;
+  stripe_customer_id?: string;
   dateOfBirth?: Date;
   timeOfBirth?: string;
   placeOfBirth?: string;

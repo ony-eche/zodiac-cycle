@@ -6,10 +6,12 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Moon, Eye, EyeOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useUserData } from '../../context/UserDataContext';
 
 export function Login() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { loadFromSupabase } = useUserData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -20,9 +22,29 @@ export function Login() {
     if (!email || !password) { setError(t('common.error')); return; }
     setLoading(true);
     setError('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { setError('Incorrect email or password'); setLoading(false); return; }
-    navigate('/dashboard');
+
+    try {
+      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+      if (loginError) { setError('Incorrect email or password'); setLoading(false); return; }
+
+      // Load profile from Supabase into context
+      await loadFromSupabase();
+
+      navigate('/dashboard');
+    } catch {
+      setError(t('common.error'));
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) { setError('Enter your email address first'); return; }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) { setError(error.message); return; }
+    setError('');
+    alert('Password reset email sent! Check your inbox.');
   };
 
   return (
@@ -37,23 +59,25 @@ export function Login() {
           </div>
           <p className="text-muted-foreground">{t('auth.login.subtitle')}</p>
         </div>
-        <div className="bg-card border border-border rounded-2xl p-8 space-y-5">
+        <div className="glass rounded-3xl p-8 space-y-5 border border-white/40">
           {error && (
-            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-sm text-destructive">{error}</div>
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-sm text-destructive">
+              {error}
+            </div>
           )}
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground">{t('auth.email')}</label>
             <Input type="email" placeholder="you@example.com" value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleLogin()}
               className="bg-input-background border-border rounded-xl py-6 text-base" autoFocus />
           </div>
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground">{t('auth.password')}</label>
             <div className="relative">
               <Input type={showPassword ? 'text' : 'password'} placeholder="Your password"
-                value={password} onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                value={password} onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
                 className="bg-input-background border-border rounded-xl py-6 text-base pr-12" />
               <button type="button" onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground">
@@ -61,11 +85,11 @@ export function Login() {
               </button>
             </div>
           </div>
-          <button onClick={() => {}} className="text-sm text-primary hover:underline">
+          <button onClick={handleForgotPassword} className="text-sm text-primary hover:underline">
             {t('auth.login.forgot')}
           </button>
           <Button onClick={handleLogin} disabled={loading}
-            className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white py-6 rounded-xl text-base">
+            className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white py-6 rounded-xl text-base btn-glow">
             {loading ? t('common.loading') : `${t('auth.login.button')} ✦`}
           </Button>
           <p className="text-center text-sm text-muted-foreground">
