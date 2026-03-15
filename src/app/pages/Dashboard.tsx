@@ -11,6 +11,7 @@ import { ProfileTab }  from './ProfileTab';
 import { CycleTab }    from './CycleTab';
 import { MessagesTab } from './MessagesTab';
 import { TransitsTab } from './TransitsTab';
+import InstallPrompt from '../components/InstallPrompt'
 
 type Tab = 'home' | 'cycle' | 'chart' | 'transits' | 'messages' | 'profile';
 
@@ -93,10 +94,12 @@ export function Dashboard() {
                 </span>
                 {isActive && <div className="w-4 h-0.5 rounded-full bg-gradient-to-r from-primary to-secondary" />}
               </button>
+              
             );
           })}
         </div>
       </nav>
+      <InstallPrompt />
     </div>
   );
 }
