@@ -161,45 +161,44 @@ export function Paywall() {
   }, []);
 
   const handleGetAccess = async () => {
-    if (selected === 'free') {
-      updateUserData({ hasPaid: false });
-      navigate('/signup');
-      return;
+  if (selected === 'free') {
+    updateUserData({ hasPaid: false });
+    navigate('/signup');
+    return;
+  }
+  if (!selected || !currency) return;
+
+  // Load Stripe immediately and store the PROMISE directly
+  const stripe = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+  setStripePromise(stripe);
+
+  const priceId = selected === 'trial' ? PRICE_ID_TRIAL : PRICE_ID_MONTHLY;
+  setLoadingIntent(true);
+
+  try {
+    const res = await fetch(`${WORKER_URL}/stripe/create-payment-intent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priceId, email: userData.email }),
+    });
+    const data = await res.json() as any;
+
+    if (data.clientSecret) {
+      setClientSecret(data.clientSecret);
+      setStripeCustomerId(data.customerId || null);
+      // Small delay to ensure stripePromise state is set before showing form
+      setTimeout(() => setShowPaymentForm(true), 100);
+    } else {
+      console.error('Stripe error:', JSON.stringify(data));
+      alert(`Payment setup failed: ${data.error || 'Unknown error'}`);
     }
-    if (!selected || !currency) return;
-
-    // Load Stripe only when user actually tries to pay
-    if (!stripePromise) {
-      setStripePromise(loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY));
-    }
-
-    const priceId = selected === 'trial' ? PRICE_ID_TRIAL : PRICE_ID_MONTHLY;
-
-    setLoadingIntent(true);
-    try {
-      const res = await fetch(`${WORKER_URL}/stripe/create-payment-intent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceId, email: userData.email }),
-      });
-      const data = await res.json() as any;
-
-      if (data.clientSecret) {
-        setClientSecret(data.clientSecret);
-        setStripeCustomerId(data.customerId || null);
-        setShowPaymentForm(true);
-      } else {
-        console.error('Stripe error:', JSON.stringify(data));
-        alert(`Payment setup failed: ${data.error || 'Unknown error'}`);
-      }
-    } catch (err) {
-      console.error('Payment intent failed:', err);
-      alert('Could not connect to payment server. Please try again.');
-    } finally {
-      setLoadingIntent(false);
-    }
-  };
-
+  } catch (err) {
+    console.error('Payment intent failed:', err);
+    alert('Could not connect to payment server. Please try again.');
+  } finally {
+    setLoadingIntent(false);
+  }
+};
   const handlePaymentSuccess = () => {
     updateUserData({
       hasPaid: true,

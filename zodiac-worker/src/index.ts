@@ -192,7 +192,7 @@ export default {
       }
     }
 
-   // ── Stripe: Create Subscription ──────────────────────────────────────────
+    // ── Stripe: Create Payment Intent ────────────────────────────────────────
     if (path === '/stripe/create-payment-intent' && request.method === 'POST') {
       try {
         const body = await request.json() as any;
@@ -204,11 +204,16 @@ export default {
           });
         }
 
-        // ── Step 1: Find or create Stripe customer ────────────────────────────
+        if (!priceId) {
+          return new Response(JSON.stringify({ error: 'Missing priceId' }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // ── Step 1: Find or create Stripe customer ────────────────────────
         let customerId: string | undefined;
 
         if (email) {
-          // Search for existing customer
           const searchRes = await fetch(
             `https://api.stripe.com/v1/customers/search?query=email:'${encodeURIComponent(email)}'&limit=1`,
             { headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}` } }
@@ -218,7 +223,6 @@ export default {
           if (searchData.data?.length > 0) {
             customerId = searchData.data[0].id;
           } else {
-            // Create new customer
             const createRes = await fetch('https://api.stripe.com/v1/customers', {
               method: 'POST',
               headers: {
@@ -229,7 +233,7 @@ export default {
             });
             const customer = await createRes.json() as any;
             if (customer.error) {
-              return new Response(JSON.stringify({ error: customer.error.message }), {
+              return new Response(JSON.stringify({ error: `Customer creation failed: ${customer.error.message}` }), {
                 status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
               });
             }
@@ -237,68 +241,110 @@ export default {
           }
         }
 
-        // ── Step 2: Create subscription ───────────────────────────────────────
-        const subParams = new URLSearchParams({
-          'items[0][price]': priceId,
-          'payment_behavior': 'default_incomplete',
-          'payment_settings[save_default_payment_method]': 'on_subscription',
-          'expand[0]': 'latest_invoice.payment_intent',
+        // ── Step 2: Fetch the price to get amount + currency ──────────────
+        const priceRes = await fetch(`https://api.stripe.com/v1/prices/${priceId}`, {
+          headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}` },
         });
+        const price = await priceRes.json() as any;
 
-        if (customerId) subParams.set('customer', customerId);
-
-        const subRes = await fetch('https://api.stripe.com/v1/subscriptions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: subParams.toString(),
-        });
-
-        const subscription = await subRes.json() as any;
-
-        if (subscription.error) {
-          // Fallback: if subscription fails, use simple PaymentIntent
-          const priceRes = await fetch(`https://api.stripe.com/v1/prices/${priceId}`, {
-            headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}` },
+        if (price.error) {
+          return new Response(JSON.stringify({ error: `Invalid price ID: ${price.error.message}` }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
-          const price = await priceRes.json() as any;
+        }
 
-          const piRes = await fetch('https://api.stripe.com/v1/payment_intents', {
+        // ── Step 3: Try subscription first (for recurring prices) ─────────
+        if (price.type === 'recurring') {
+          const subParams = new URLSearchParams({
+            'items[0][price]': priceId,
+            'payment_behavior': 'default_incomplete',
+            'payment_settings[save_default_payment_method]': 'on_subscription',
+            'expand[0]': 'latest_invoice.payment_intent',
+          });
+          if (customerId) subParams.set('customer', customerId);
+
+          const subRes = await fetch('https://api.stripe.com/v1/subscriptions', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
               'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams({
-              'amount': String(price.unit_amount),
-              'currency': price.currency,
-              'automatic_payment_methods[enabled]': 'true',
-              ...(customerId ? { 'customer': customerId } : {}),
-            }).toString(),
+            body: subParams.toString(),
           });
-          const pi = await piRes.json() as any;
-          if (pi.error) {
-            return new Response(JSON.stringify({ error: pi.error.message }), {
-              status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+
+          const subscription = await subRes.json() as any;
+
+          if (!subscription.error) {
+            const clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
+            if (clientSecret) {
+              return new Response(JSON.stringify({
+                clientSecret,
+                subscriptionId: subscription.id,
+                customerId,
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
           }
-          return new Response(JSON.stringify({ clientSecret: pi.client_secret, customerId }), {
+        }
+
+        // ── Step 4: Fallback to one-time PaymentIntent ────────────────────
+        const piParams = new URLSearchParams({
+          'amount': String(price.unit_amount || 100),
+          'currency': price.currency || 'usd',
+          'automatic_payment_methods[enabled]': 'true',
+        });
+        if (customerId) piParams.set('customer', customerId);
+
+        const piRes = await fetch('https://api.stripe.com/v1/payment_intents', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: piParams.toString(),
+        });
+
+        const pi = await piRes.json() as any;
+
+        if (pi.error) {
+          return new Response(JSON.stringify({ error: `Payment intent failed: ${pi.error.message}` }), {
+            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        return new Response(JSON.stringify({
+          clientSecret: pi.client_secret,
+          customerId,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+
+      } catch (err) {
+        return new Response(JSON.stringify({ error: `Unexpected error: ${String(err)}` }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // ── Stripe: Update customer email ─────────────────────────────────────────
+    if (path === '/stripe/update-customer' && request.method === 'POST') {
+      try {
+        const { customerId, email } = await request.json() as any;
+        if (!customerId || !email) {
+          return new Response(JSON.stringify({ ok: true }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
-
-        const clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
-        const subscriptionId = subscription.id;
-
-        if (!clientSecret) {
-          return new Response(JSON.stringify({ error: 'No client secret returned from Stripe' }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
-        return new Response(JSON.stringify({ clientSecret, subscriptionId, customerId }), {
+        await fetch(`https://api.stripe.com/v1/customers/${customerId}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({ email }).toString(),
+        });
+        return new Response(JSON.stringify({ ok: true }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       } catch (err) {
@@ -307,33 +353,31 @@ export default {
         });
       }
     }
-    // ── Stripe: Update customer email ────────────────────────────────────────────
-if (path === '/stripe/update-customer' && request.method === 'POST') {
-  try {
-    const { customerId, email } = await request.json() as any;
-    if (!customerId || !email) {
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+
+    // ── Stripe: Debug endpoint (remove after testing) ─────────────────────────
+    if (path === '/stripe/test' && request.method === 'GET') {
+      try {
+        const priceId = url.searchParams.get('priceId');
+        if (!priceId) {
+          return new Response(JSON.stringify({ error: 'Add ?priceId=price_xxx to the URL' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        const priceRes = await fetch(`https://api.stripe.com/v1/prices/${priceId}`, {
+          headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}` },
+        });
+        const price = await priceRes.json() as any;
+        return new Response(JSON.stringify({ price }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
-    await fetch(`https://api.stripe.com/v1/customers/${customerId}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ email }).toString(),
-    });
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-}
-    // ── Health check ─────────────────────────────────────────────────────────
+
+    // ── Health check ──────────────────────────────────────────────────────────
     if (path === '/health') {
       return new Response(JSON.stringify({
         status: 'ok',
