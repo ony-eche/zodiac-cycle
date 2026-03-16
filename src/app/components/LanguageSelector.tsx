@@ -1,16 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Globe, Check, ChevronDown } from 'lucide-react';
+import { Globe, Check, ChevronDown, Loader2 } from 'lucide-react';
+import { loadLanguage } from '../../lib/i18n';
 
-// All supported languages — hardcoded core + AI-translated rest
+const CORE_LANGS = ['en', 'fr', 'de', 'es', 'pt'];
+
 export const LANGUAGES = [
-  // Core (hardcoded translations)
   { code: 'en', name: 'English', flag: '🇬🇧', native: 'English' },
   { code: 'fr', name: 'French', flag: '🇫🇷', native: 'Français' },
   { code: 'de', name: 'German', flag: '🇩🇪', native: 'Deutsch' },
   { code: 'es', name: 'Spanish', flag: '🇪🇸', native: 'Español' },
   { code: 'pt', name: 'Portuguese', flag: '🇧🇷', native: 'Português' },
-  // Extended (browser/system translations via i18next fallback)
   { code: 'ar', name: 'Arabic', flag: '🇸🇦', native: 'العربية' },
   { code: 'zh', name: 'Chinese', flag: '🇨🇳', native: '中文' },
   { code: 'hi', name: 'Hindi', flag: '🇮🇳', native: 'हिन्दी' },
@@ -53,17 +53,14 @@ export const LANGUAGES = [
   { code: 'pa', name: 'Punjabi', flag: '🇮🇳', native: 'ਪੰਜਾਬੀ' },
   { code: 'kn', name: 'Kannada', flag: '🇮🇳', native: 'ಕನ್ನಡ' },
   { code: 'ml', name: 'Malayalam', flag: '🇮🇳', native: 'മലയാളം' },
-  { code: 'si', name: 'Sinhala', flag: '🇱🇰', native: 'සිංහල' },
   { code: 'my', name: 'Burmese', flag: '🇲🇲', native: 'မြန်မာဘာသာ' },
   { code: 'km', name: 'Khmer', flag: '🇰🇭', native: 'ភាសាខ្មែរ' },
-  { code: 'lo', name: 'Lao', flag: '🇱🇦', native: 'ພາສາລາວ' },
   { code: 'ka', name: 'Georgian', flag: '🇬🇪', native: 'ქართული' },
   { code: 'az', name: 'Azerbaijani', flag: '🇦🇿', native: 'Azərbaycan' },
   { code: 'kk', name: 'Kazakh', flag: '🇰🇿', native: 'Қазақша' },
   { code: 'uz', name: 'Uzbek', flag: '🇺🇿', native: "O'zbek" },
   { code: 'hy', name: 'Armenian', flag: '🇦🇲', native: 'Հայերեն' },
   { code: 'ne', name: 'Nepali', flag: '🇳🇵', native: 'नेपाली' },
-  { code: 'si', name: 'Sinhala', flag: '🇱🇰', native: 'සිංහල' },
   { code: 'mn', name: 'Mongolian', flag: '🇲🇳', native: 'Монгол' },
   { code: 'sq', name: 'Albanian', flag: '🇦🇱', native: 'Shqip' },
   { code: 'bs', name: 'Bosnian', flag: '🇧🇦', native: 'Bosanski' },
@@ -72,27 +69,25 @@ export const LANGUAGES = [
   { code: 'sk', name: 'Slovak', flag: '🇸🇰', native: 'Slovenčina' },
   { code: 'sl', name: 'Slovenian', flag: '🇸🇮', native: 'Slovenščina' },
   { code: 'bg', name: 'Bulgarian', flag: '🇧🇬', native: 'Български' },
-  { code: 'mk', name: 'Macedonian', flag: '🇲🇰', native: 'Македонски' },
   { code: 'lt', name: 'Lithuanian', flag: '🇱🇹', native: 'Lietuvių' },
   { code: 'lv', name: 'Latvian', flag: '🇱🇻', native: 'Latviešu' },
   { code: 'et', name: 'Estonian', flag: '🇪🇪', native: 'Eesti' },
   { code: 'is', name: 'Icelandic', flag: '🇮🇸', native: 'Íslenska' },
-  { code: 'mt', name: 'Maltese', flag: '🇲🇹', native: 'Malti' },
   { code: 'cy', name: 'Welsh', flag: '🏴󠁧󠁢󠁷󠁬󠁳󠁿', native: 'Cymraeg' },
   { code: 'ga', name: 'Irish', flag: '🇮🇪', native: 'Gaeilge' },
   { code: 'eu', name: 'Basque', flag: '🇪🇸', native: 'Euskera' },
   { code: 'ca', name: 'Catalan', flag: '🇪🇸', native: 'Català' },
-  { code: 'gl', name: 'Galician', flag: '🇪🇸', native: 'Galego' },
 ];
 
 interface Props {
-  variant?: 'icon' | 'full'; // icon = globe button only, full = labeled dropdown
+  variant?: 'icon' | 'full';
 }
 
 export function LanguageSelector({ variant = 'icon' }: Props) {
   const { i18n, t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const current = LANGUAGES.find(l => l.code === i18n.language.split('-')[0]) || LANGUAGES[0];
@@ -114,20 +109,52 @@ export function LanguageSelector({ variant = 'icon' }: Props) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const handleSelect = (code: string) => {
-    i18n.changeLanguage(code);
-    localStorage.setItem('zodiac_language', code);
+  const handleSelect = async (code: string) => {
     setOpen(false);
     setSearch('');
+
+    // Core languages switch instantly
+    if (CORE_LANGS.includes(code)) {
+      i18n.changeLanguage(code);
+      localStorage.setItem('zodiac_language', code);
+      return;
+    }
+
+    // Non-core — load AI translation first
+    setLoading(code);
+    try {
+      await loadLanguage(code);
+      i18n.changeLanguage(code);
+      localStorage.setItem('zodiac_language', code);
+    } catch {
+      // Fallback to English
+      i18n.changeLanguage('en');
+    } finally {
+      setLoading(null);
+    }
   };
 
   return (
     <div ref={ref} className="relative">
+      {/* Loading overlay */}
+      {loading && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-card rounded-3xl p-8 flex flex-col items-center gap-4 shadow-2xl border border-border mx-6">
+            <Loader2 className="w-10 h-10 text-primary animate-spin" />
+            <div className="text-center">
+              <p className="font-semibold">Translating app...</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                This only happens once. The translation will be saved locally.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {variant === 'icon' ? (
         <button
           onClick={() => setOpen(!open)}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-card/80 border border-border/50 hover:bg-card transition-colors text-sm"
-          title="Change language"
         >
           <Globe className="w-4 h-4 text-muted-foreground" />
           <span className="text-base">{current.flag}</span>
@@ -150,7 +177,8 @@ export function LanguageSelector({ variant = 'icon' }: Props) {
       )}
 
       {open && (
-        <div className="absolute z-50 mt-2 bg-card border border-border rounded-2xl shadow-xl overflow-hidden"
+        <div
+          className="absolute z-50 mt-2 bg-card border border-border rounded-2xl shadow-xl overflow-hidden"
           style={{
             width: '280px',
             right: variant === 'icon' ? 0 : undefined,
@@ -160,7 +188,6 @@ export function LanguageSelector({ variant = 'icon' }: Props) {
             flexDirection: 'column',
           }}
         >
-          {/* Search */}
           <div className="p-3 border-b border-border">
             <input
               type="text"
@@ -172,35 +199,64 @@ export function LanguageSelector({ variant = 'icon' }: Props) {
             />
           </div>
 
-          {/* List */}
           <div className="overflow-y-auto flex-1">
-            {filtered.length === 0 ? (
-              <p className="text-center text-muted-foreground text-sm py-6">No languages found</p>
-            ) : (
-              filtered.map(lang => (
-                <button
-                  key={lang.code}
-                  onClick={() => handleSelect(lang.code)}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 hover:bg-accent/20 transition-colors text-left ${
-                    current.code === lang.code ? 'bg-primary/10' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg">{lang.flag}</span>
-                    <div>
-                      <p className="text-sm font-medium">{lang.native}</p>
-                      <p className="text-xs text-muted-foreground">{lang.name}</p>
-                    </div>
+            {/* Core languages section */}
+            <div className="px-3 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-accent/10">
+              ⚡ Instant
+            </div>
+            {filtered.filter(l => CORE_LANGS.includes(l.code)).map(lang => (
+              <button
+                key={lang.code}
+                onClick={() => handleSelect(lang.code)}
+                className={`w-full flex items-center justify-between px-4 py-2.5 hover:bg-accent/20 transition-colors text-left ${current.code === lang.code ? 'bg-primary/10' : ''}`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-lg">{lang.flag}</span>
+                  <div>
+                    <p className="text-sm font-medium">{lang.native}</p>
+                    <p className="text-xs text-muted-foreground">{lang.name}</p>
                   </div>
-                  {current.code === lang.code && (
-                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                  )}
-                </button>
-              ))
+                </div>
+                {current.code === lang.code && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
+              </button>
+            ))}
+
+            {/* AI languages section */}
+            {filtered.filter(l => !CORE_LANGS.includes(l.code)).length > 0 && (
+              <>
+                <div className="px-3 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-accent/10">
+                  🤖 AI Translated (saved locally)
+                </div>
+                {filtered.filter(l => !CORE_LANGS.includes(l.code)).map(lang => {
+                  const isCached = !!localStorage.getItem(`zodiac_translation_${lang.code}`);
+                  return (
+                    <button
+                      key={lang.code}
+                      onClick={() => handleSelect(lang.code)}
+                      className={`w-full flex items-center justify-between px-4 py-2.5 hover:bg-accent/20 transition-colors text-left ${current.code === lang.code ? 'bg-primary/10' : ''}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">{lang.flag}</span>
+                        <div>
+                          <p className="text-sm font-medium">{lang.native}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {lang.name} {isCached ? '· ✓ cached' : '· first use translates'}
+                          </p>
+                        </div>
+                      </div>
+                      {current.code === lang.code && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {filtered.length === 0 && (
+              <p className="text-center text-muted-foreground text-sm py-6">No languages found</p>
             )}
           </div>
         </div>
       )}
     </div>
   );
-}
+} 

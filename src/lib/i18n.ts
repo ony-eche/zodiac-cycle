@@ -284,5 +284,124 @@ i18n
       lookupLocalStorage: 'zodiac_language',
     },
   });
+  // ─── AI Translation Cache ──────────────────────────────────────────────────
+const CACHE_PREFIX = 'zodiac_translation_';
+const CORE_LANGS = ['en', 'fr', 'de', 'es', 'pt'];
+
+function getCachedTranslation(langCode: string): typeof en | null {
+  try {
+    const cached = localStorage.getItem(`${CACHE_PREFIX}${langCode}`);
+    if (!cached) return null;
+    return JSON.parse(cached);
+  } catch { return null; }
+}
+
+function setCachedTranslation(langCode: string, data: typeof en) {
+  try {
+    localStorage.setItem(`${CACHE_PREFIX}${langCode}`, JSON.stringify(data));
+  } catch {}
+}
+
+async function generateFullTranslation(langCode: string, langName: string): Promise<typeof en> {
+  const WORKER_URL = (import.meta as any).env?.VITE_WORKER_URL ?? '';
+
+  // Split into chunks to avoid token limits
+  const sections = Object.keys(en) as (keyof typeof en)[];
+  const translated: any = {};
+
+  for (const section of sections) {
+    try {
+      const res = await fetch(`${WORKER_URL}/ai/predict`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system: `You are a precise translator. Translate the JSON values to ${langName}. 
+Rules:
+- Keep ALL JSON keys exactly as they are
+- Keep {{variable}} placeholders exactly as they are  
+- Keep emoji exactly as they are
+- Return ONLY valid JSON, no markdown, no explanation
+- Translate only the string values, not keys`,
+          messages: [{
+            role: 'user',
+            content: `Translate these values to ${langName}. Return valid JSON only:\n${JSON.stringify((en as any)[section], null, 2)}`
+          }],
+        }),
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text || '';
+      const clean = text.replace(/```json|```/g, '').trim();
+      translated[section] = JSON.parse(clean);
+    } catch {
+      translated[section] = (en as any)[section]; // fallback to English for this section
+    }
+  }
+
+  return translated as typeof en;
+}
+
+// ─── Load AI language on demand ────────────────────────────────────────────
+export async function loadLanguage(langCode: string): Promise<void> {
+  const base = langCode.split('-')[0];
+
+  // Already have it
+  if (i18n.hasResourceBundle(base, 'translation')) return;
+
+  // Check localStorage cache
+  const cached = getCachedTranslation(base);
+  if (cached) {
+    i18n.addResourceBundle(base, 'translation', cached, true, true);
+    return;
+  }
+
+  // Generate with AI
+  const lang = LANGUAGES_FOR_AI.find(l => l.code === base);
+  if (!lang) return;
+
+  try {
+    const translation = await generateFullTranslation(base, lang.name);
+    setCachedTranslation(base, translation);
+    i18n.addResourceBundle(base, 'translation', translation, true, true);
+  } catch {
+    // Silently fall back to English
+  }
+}
+
+// Language names for AI translation (non-core languages)
+const LANGUAGES_FOR_AI = [
+  { code: 'ar', name: 'Arabic' }, { code: 'zh', name: 'Chinese (Simplified)' },
+  { code: 'hi', name: 'Hindi' }, { code: 'ja', name: 'Japanese' },
+  { code: 'ko', name: 'Korean' }, { code: 'ru', name: 'Russian' },
+  { code: 'tr', name: 'Turkish' }, { code: 'it', name: 'Italian' },
+  { code: 'nl', name: 'Dutch' }, { code: 'pl', name: 'Polish' },
+  { code: 'sv', name: 'Swedish' }, { code: 'da', name: 'Danish' },
+  { code: 'fi', name: 'Finnish' }, { code: 'nb', name: 'Norwegian' },
+  { code: 'uk', name: 'Ukrainian' }, { code: 'id', name: 'Indonesian' },
+  { code: 'ms', name: 'Malay' }, { code: 'th', name: 'Thai' },
+  { code: 'vi', name: 'Vietnamese' }, { code: 'ro', name: 'Romanian' },
+  { code: 'hu', name: 'Hungarian' }, { code: 'cs', name: 'Czech' },
+  { code: 'el', name: 'Greek' }, { code: 'he', name: 'Hebrew' },
+  { code: 'fa', name: 'Persian' }, { code: 'bn', name: 'Bengali' },
+  { code: 'ur', name: 'Urdu' }, { code: 'sw', name: 'Swahili' },
+  { code: 'yo', name: 'Yoruba' }, { code: 'ig', name: 'Igbo' },
+  { code: 'ha', name: 'Hausa' }, { code: 'am', name: 'Amharic' },
+  { code: 'zu', name: 'Zulu' }, { code: 'af', name: 'Afrikaans' },
+  { code: 'tl', name: 'Filipino' }, { code: 'ta', name: 'Tamil' },
+  { code: 'te', name: 'Telugu' }, { code: 'mr', name: 'Marathi' },
+  { code: 'gu', name: 'Gujarati' }, { code: 'pa', name: 'Punjabi' },
+  { code: 'kn', name: 'Kannada' }, { code: 'ml', name: 'Malayalam' },
+  { code: 'my', name: 'Burmese' }, { code: 'km', name: 'Khmer' },
+  { code: 'ka', name: 'Georgian' }, { code: 'az', name: 'Azerbaijani' },
+  { code: 'kk', name: 'Kazakh' }, { code: 'uz', name: 'Uzbek' },
+  { code: 'hy', name: 'Armenian' }, { code: 'ne', name: 'Nepali' },
+  { code: 'mn', name: 'Mongolian' }, { code: 'sq', name: 'Albanian' },
+  { code: 'bs', name: 'Bosnian' }, { code: 'hr', name: 'Croatian' },
+  { code: 'sr', name: 'Serbian' }, { code: 'sk', name: 'Slovak' },
+  { code: 'sl', name: 'Slovenian' }, { code: 'bg', name: 'Bulgarian' },
+  { code: 'lt', name: 'Lithuanian' }, { code: 'lv', name: 'Latvian' },
+  { code: 'et', name: 'Estonian' }, { code: 'is', name: 'Icelandic' },
+  { code: 'cy', name: 'Welsh' }, { code: 'ga', name: 'Irish' },
+  { code: 'eu', name: 'Basque' }, { code: 'ca', name: 'Catalan' },
+]; 
 
 export default i18n;

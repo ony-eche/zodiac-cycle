@@ -216,16 +216,16 @@ export function Paywall() {
     t('paywall.features.unlimited'),
   ];
 
-  const stripeAppearance = {
-    theme: 'stripe' as const,
-    variables: {
-      colorPrimary: '#c084fc',
-      colorBackground: 'rgba(255,255,255,0.85)',
-      colorText: '#2d1b3d',
-      colorDanger: '#d4183d',
-      borderRadius: '12px',
-    },
-  };
+const stripeAppearance = {
+  theme: 'stripe' as const,
+  variables: {
+    colorPrimary: '#c084fc',
+    colorBackground: '#ffffff',
+    colorText: '#2d1b3d',
+    colorDanger: '#d4183d',
+    borderRadius: '12px',
+  },
+};
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start px-4 py-8 overflow-y-auto">
