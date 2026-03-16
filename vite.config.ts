@@ -42,8 +42,9 @@ export default defineConfig({
    ] 
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallback: null,
+  globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+  navigateFallback: null,
+  importScripts: ['/sw-push.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/owmmrkowqkjbrimazftv\.supabase\.co\/.*/i,

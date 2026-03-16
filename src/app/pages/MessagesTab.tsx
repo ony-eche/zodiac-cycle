@@ -6,7 +6,6 @@ import { Bell, ChevronRight, RefreshCw, Sparkles, Lock } from 'lucide-react';
 import { differenceInDays } from 'date-fns';
 import { generateDailyPredictions, getCachedPredictions, cachePredictions, type Prediction } from '../../lib/predictions';
 import { useTranslation } from 'react-i18next';
-import { getAiMessageUsage, incrementAiMessageCount } from '../../lib/aiMessageLimit';
 
 function getCycleDay(lastPeriodStart?: Date, cycleLength: number = 28): number {
   if (!lastPeriodStart) return 14;
@@ -29,32 +28,60 @@ export function MessagesTab() {
   const [loading, setLoading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   const cycleDay = getCycleDay(userData.lastPeriodStart);
   const cyclePhase = getCyclePhase(cycleDay);
   const isPremium = userData.hasPaid;
-  const { remaining, canUse } = getAiMessageUsage();
 
+  // ── Premium gate — show upgrade screen for free users ─────────────────────
+  if (!isPremium) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] space-y-6 px-4 pb-24">
+        <div className="text-center space-y-3">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-secondary/10 flex items-center justify-center mx-auto">
+            <Sparkles className="w-10 h-10 text-primary" />
+          </div>
+          <h2 className="text-2xl font-bold">Daily Cosmic Insights</h2>
+          <p className="text-muted-foreground text-sm max-w-xs mx-auto leading-relaxed">
+            Unlock personalised daily predictions combining your natal chart with your current cycle phase.
+          </p>
+        </div>
+
+        <div className="glass rounded-3xl p-5 border border-white/40 w-full space-y-3">
+          {[
+            '🔮 Daily AI-powered natal chart readings',
+            '🌙 Cycle phase + astrology combined',
+            '⭐ Transit interpretations personalised to you',
+            '💫 Unlimited refreshes every day',
+            '✨ No ads across the entire app',
+          ].map(f => (
+            <div key={f} className="flex items-center gap-3">
+              <span className="text-sm">{f}</span>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={() => navigate('/onboarding/paywall')}
+          className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-base"
+          style={{ boxShadow: '0 4px 24px rgba(192,132,252,0.4)' }}
+        >
+          Unlock Premium ✦
+        </button>
+
+        <p className="text-xs text-muted-foreground text-center">
+          €0.99 trial · then €5.49/mo · Cancel anytime
+        </p>
+      </div>
+    );
+  }
+
+  // ── Premium content ────────────────────────────────────────────────────────
   const loadPredictions = async (forceRefresh = false) => {
-    // Check limit for free users
-    if (!isPremium) {
-      if (!canUse && forceRefresh) {
-        setShowUpgradePrompt(true);
-        return;
-      }
-    }
-
     if (!forceRefresh) {
       const cached = getCachedPredictions();
       if (cached && cached.length > 0) { setMessages(cached); return; }
     }
-
-    // Increment count for free users on fresh load
-    if (!isPremium && forceRefresh) {
-      incrementAiMessageCount();
-    }
-
     setLoading(true);
     setError(null);
     try {
@@ -73,6 +100,7 @@ export function MessagesTab() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => { loadPredictions(); }, []);
 
   const unreadCount = messages.filter(m => m.unread).length;
@@ -101,25 +129,6 @@ export function MessagesTab() {
           </button>
         </div>
       </div>
-
-      {/* Free tier usage indicator */}
-      {!isPremium && (
-        <div className="rounded-2xl p-3 border border-primary/20 flex items-center justify-between"
-          style={{ background: 'rgba(192,132,252,0.05)' }}>
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-primary"/>
-            <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-primary">{remaining}</span> free refresh{remaining !== 1 ? 'es' : ''} left today
-            </p>
-          </div>
-          <button
-            onClick={() => navigate('/onboarding/paywall')}
-            className="text-xs text-primary font-semibold hover:underline"
-          >
-            Go Premium ✦
-          </button>
-        </div>
-      )}
 
       {loading && (
         <Card className="p-8 border-border flex flex-col items-center gap-4">
@@ -201,42 +210,6 @@ export function MessagesTab() {
           <p className="text-xs text-muted-foreground">{t('messages.notice')}</p>
         </div>
       </Card>
-
-      {/* Upgrade prompt modal */}
-      {showUpgradePrompt && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-          <div className="glass-heavy w-full max-w-lg rounded-t-3xl p-6 border-t border-white/40 space-y-4">
-            <div className="w-10 h-1 rounded-full bg-border/50 mx-auto"/>
-            <div className="text-center space-y-3">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                <Lock className="w-8 h-8 text-primary"/>
-              </div>
-              <h3 className="text-xl font-bold">Daily limit reached</h3>
-              <p className="text-sm text-muted-foreground">
-                You've used your 3 free AI messages for today.
-                Upgrade to Premium for unlimited daily cosmic insights.
-              </p>
-              <div className="glass rounded-2xl p-3 border border-white/30">
-                <p className="text-xs text-muted-foreground">
-                  🔄 Resets at midnight · ✨ 3 free refreshes per day
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => { setShowUpgradePrompt(false); navigate('/onboarding/paywall'); }}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold btn-glow"
-            >
-              Upgrade to Premium ✦
-            </button>
-            <button
-              onClick={() => setShowUpgradePrompt(false)}
-              className="w-full py-3 rounded-2xl glass border border-white/30 text-sm text-muted-foreground"
-            >
-              Come back tomorrow
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
-}
+} 

@@ -178,15 +178,16 @@ export function LanguageSelector({ variant = 'icon' }: Props) {
 
       {open && (
         <div
-          className="absolute z-50 mt-2 bg-card border border-border rounded-2xl shadow-xl overflow-hidden"
-          style={{
-            width: '280px',
-            right: variant === 'icon' ? 0 : undefined,
-            left: variant === 'full' ? 0 : undefined,
-            maxHeight: '400px',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
+          className="fixed z-[100] bg-card border border-border rounded-2xl shadow-xl overflow-hidden"
+style={{
+  width: '280px',
+  maxHeight: '60vh',
+  display: 'flex',
+  flexDirection: 'column',
+  top: '40%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+}}
         >
           <div className="p-3 border-b border-border">
             <input

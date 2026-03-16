@@ -176,4 +176,4 @@ export function BirthPlace() {
       </div>
     </div>
   );
-}
+} 

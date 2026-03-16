@@ -4,7 +4,7 @@ import {
   format, addDays, differenceInDays, startOfMonth, endOfMonth,
   eachDayOfInterval, isSameDay, addMonths, subMonths, isToday,
 } from 'date-fns';
-import { X, Check, Trash2, Edit3, Droplet } from 'lucide-react';
+import { X, Check, Trash2, Edit3 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AdBanner } from '../components/AdBanner';
 
@@ -16,7 +16,6 @@ interface PeriodEntry { id: string; start: string; end: string; }
 
 function generateId() { return Math.random().toString(36).slice(2, 9); }
 
-// ─── Merge single-day taps into proper period ranges ──────────────────────────
 function mergePeriods(periods: PeriodEntry[]): PeriodEntry[] {
   if (periods.length === 0) return [];
   const sorted = [...periods].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
@@ -49,7 +48,6 @@ function calculateCycleInfo(rawPeriods: PeriodEntry[], currentDate: Date = new D
   const lastPeriod = sorted[sorted.length - 1];
   const lastStart = new Date(lastPeriod.start);
   const lastEnd = new Date(lastPeriod.end || lastPeriod.start);
-
   let avgCycleLength = 28;
   const lengths: number[] = [];
   if (sorted.length >= 2) {
@@ -59,21 +57,17 @@ function calculateCycleInfo(rawPeriods: PeriodEntry[], currentDate: Date = new D
     }
     if (lengths.length > 0) avgCycleLength = Math.round(lengths.reduce((a, b) => a + b) / lengths.length);
   }
-
   const avgPeriodLength = Math.max(1, differenceInDays(lastEnd, lastStart) + 1);
   const daysSinceLast = differenceInDays(currentDate, lastStart);
   const cycleDay = Math.max(1, (daysSinceLast % avgCycleLength) + 1);
   const daysUntilNext = avgCycleLength - (daysSinceLast % avgCycleLength);
   const nextPeriod = addDays(currentDate, daysUntilNext);
-
   let phase = 'luteal';
   if (cycleDay <= avgPeriodLength) phase = 'menstrual';
   else if (cycleDay <= 13) phase = 'follicular';
   else if (cycleDay <= 16) phase = 'ovulation';
-
   const ovulationDay = avgCycleLength - 14;
   const accuracy = Math.min(95, 50 + lengths.length * 15);
-
   return {
     cycleDay, nextPeriod, cycleLength: avgCycleLength, periodLength: avgPeriodLength,
     phase, ovulationDay, fertileStart: ovulationDay - 5, fertileEnd: ovulationDay + 1,
@@ -86,8 +80,7 @@ function getDayStatus(date: Date, rawPeriods: PeriodEntry[], cycleInfo: any): 'p
   for (const period of merged) {
     const start = new Date(period.start);
     const end = new Date(period.end || period.start);
-    const endPlusOne = addDays(end, 0);
-    if (date >= start && date <= endPlusOne) return 'period';
+    if (date >= start && date <= end) return 'period';
   }
   if (cycleInfo.lastStart) {
     const daysSinceLast = differenceInDays(date, cycleInfo.lastStart);
@@ -101,7 +94,6 @@ function getDayStatus(date: Date, rawPeriods: PeriodEntry[], cycleInfo: any): 'p
   return 'normal';
 }
 
-// ─── Phase insights ───────────────────────────────────────────────────────────
 const PHASE_INSIGHTS: Record<string, { emoji: string; label: string; color: string; tip: string; energy: string; mood: string }> = {
   menstrual:  { emoji: '🔴', label: 'Menstrual',  color: '#f43f5e', tip: 'Rest is productive. Honour your body with warmth, gentle movement, and iron-rich foods.', energy: 'Low', mood: 'Reflective' },
   follicular: { emoji: '🌸', label: 'Follicular', color: '#c084fc', tip: 'Estrogen is rising! Great time to start new projects, socialise, and try new workouts.', energy: 'Rising', mood: 'Optimistic' },
@@ -249,7 +241,6 @@ function MonthGrid({ month, periods, logs, cycleInfo, editMode, selectedDate, on
   const today = new Date();
   const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) });
   const startPad = startOfMonth(month).getDay();
-
   return (
     <div className="mb-6">
       <p className="text-center text-sm font-bold text-gray-700 mb-3">{format(month, 'MMMM yyyy')}</p>
@@ -271,21 +262,11 @@ function MonthGrid({ month, periods, logs, cycleInfo, editMode, selectedDate, on
           const isFertile = status === 'fertile';
           const isOvulation = status === 'ovulation';
           const isFuture = day > today;
-
-          const periodEntry = cycleInfo.mergedPeriods?.find((p: PeriodEntry) => {
-            const s = new Date(p.start);
-            const e = new Date(p.end || p.start);
-            return day >= s && day <= e;
-          });
-
           return (
             <div key={dateStr} className="flex flex-col items-center py-1">
               {isToday_ && (
-                <span className="text-[7px] font-bold text-gray-500 uppercase tracking-widest leading-none mb-0.5">
-                  TODAY
-                </span>
+                <span className="text-[7px] font-bold text-gray-500 uppercase tracking-widest leading-none mb-0.5">TODAY</span>
               )}
-              {/* THE FIX: number is now INSIDE the button */}
               <button
                 onClick={() => onDayTap(day)}
                 className={`
@@ -358,9 +339,7 @@ function SymptomTrends({ logs }: { logs: Record<string, DayLog> }) {
 
 // ─── Cycle History ────────────────────────────────────────────────────────────
 function CycleHistory({ periods, cycleInfo, onEdit }: {
-  periods: PeriodEntry[];
-  cycleInfo: any;
-  onEdit: (p: PeriodEntry) => void;
+  periods: PeriodEntry[]; cycleInfo: any; onEdit: (p: PeriodEntry) => void;
 }) {
   const merged = cycleInfo.mergedPeriods as PeriodEntry[];
   if (!merged || merged.length === 0) {
@@ -375,10 +354,8 @@ function CycleHistory({ periods, cycleInfo, onEdit }: {
       </div>
     );
   }
-
   const sorted = [...merged].sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
   const cycleLength = cycleInfo.cycleLength;
-
   return (
     <div className="rounded-3xl bg-white border border-rose-100 shadow-sm p-5 mb-4">
       <h3 className="text-sm font-bold text-gray-700 mb-4">Cycle History</h3>
@@ -391,16 +368,12 @@ function CycleHistory({ periods, cycleInfo, onEdit }: {
           const fertileStartDate = addDays(pStart, ovDay - 5);
           const fertileEndDate = addDays(pStart, ovDay + 1);
           const ovulationDate = addDays(pStart, ovDay);
-
-          // Cycle length to next period
           const nextPeriod = sorted[idx - 1];
           const thisCycleLength = nextPeriod
             ? differenceInDays(new Date(nextPeriod.start), pStart)
             : null;
-
           return (
             <div key={p.id} className="rounded-2xl border border-rose-100 overflow-hidden">
-              {/* Header row */}
               <div className="flex items-center justify-between px-3 py-2.5 bg-rose-50">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-rose-400" />
@@ -417,9 +390,7 @@ function CycleHistory({ periods, cycleInfo, onEdit }: {
                   </button>
                 </div>
               </div>
-
-              {/* Stats row */}
-              <div className="grid grid-cols-3 divide-x divide-rose-50 px-0">
+              <div className="grid grid-cols-3 divide-x divide-rose-50">
                 <div className="px-3 py-2 text-center">
                   <p className="text-[10px] text-gray-400 uppercase tracking-wide">Cycle</p>
                   <p className="text-xs font-bold text-purple-500 mt-0.5">
@@ -457,6 +428,7 @@ export function CycleTab() {
   const [showLogModal, setShowLogModal] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState<PeriodEntry | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
 
   const [logs, setLogs] = useState<Record<string, DayLog>>(() => {
     try { return JSON.parse(localStorage.getItem('zodiac_day_logs') || '{}'); } catch { return {}; }
@@ -516,7 +488,6 @@ export function CycleTab() {
         const end = p.end ? new Date(p.end) : start;
         return day >= start && day <= end;
       });
-
       if (existingIdx >= 0) {
         const p = periods[existingIdx];
         const pStart = new Date(p.start);
@@ -632,74 +603,36 @@ export function CycleTab() {
         </div>
       </div>
 
-      {/* ── Edit mode banner ── */}
-      {editMode && (
-        <div className="mb-3 rounded-2xl p-3 border border-rose-300 text-center bg-rose-50">
-          <p className="text-sm text-rose-500 font-semibold">🩸 Tap any day to mark or unmark as period</p>
-          <p className="text-xs text-rose-400 mt-0.5">Tap "Done ✓" when finished</p>
-        </div>
-      )}
-
-      {/* ── Legend ── */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4 px-1">
-        {[
-          { color: 'bg-rose-400', label: 'Period' },
-          { color: 'bg-rose-50 border-2 border-dashed border-rose-300', label: 'Predicted' },
-          { color: 'bg-teal-50 border-2 border-teal-300', label: 'Fertile' },
-          { color: 'bg-teal-100 border-2 border-teal-400', label: 'Ovulation' },
-        ].map(l => (
-          <div key={l.label} className="flex items-center gap-1.5">
-            <div className={`w-3.5 h-3.5 rounded-full ${l.color}`} />
-            <span className="text-[10px] text-gray-500">{l.label}</span>
+      {/* ── Calendar button ── */}
+      <button
+        onClick={() => setShowCalendarModal(true)}
+        className="w-full rounded-3xl bg-white border border-rose-100 shadow-sm p-4 mb-4 flex items-center justify-between"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center">
+            <span className="text-xl">📅</span>
           </div>
-        ))}
-      </div>
-
-      {/* ── Scrollable calendar ── */}
-      <div className="rounded-3xl bg-white border border-rose-100 shadow-sm px-4 pt-4 pb-2 mb-4">
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm font-bold text-gray-700">Calendar</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => todayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
-              className="text-xs px-3 py-1.5 rounded-full border border-rose-200 text-rose-400 font-medium hover:bg-rose-50"
-            >
-              Today
-            </button>
-            <button
-              onClick={() => setEditMode(m => !m)}
-              className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-all ${editMode
-                ? 'bg-rose-400 text-white shadow-md shadow-rose-200'
-                : 'border border-rose-300 text-rose-400 hover:bg-rose-50'}`}
-            >
-              {editMode ? 'Done ✓' : '🩸 Edit Period'}
-            </button>
+          <div className="text-left">
+            <p className="text-sm font-bold text-gray-800">Period Calendar</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {periods.length > 0
+                ? `${cycleInfo.mergedPeriods?.length || 0} cycles logged · tap to view & edit`
+                : 'Tap to log your period dates'}
+            </p>
           </div>
         </div>
-
-        <div className="max-h-[520px] overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-          {months.map((month) => {
-            const isCurrentMonth = format(month, 'yyyy-MM') === format(new Date(), 'yyyy-MM');
-            return (
-              <div key={format(month, 'yyyy-MM')} ref={isCurrentMonth ? todayRef : undefined}>
-                <MonthGrid
-                  month={month}
-                  periods={periods}
-                  logs={logs}
-                  cycleInfo={cycleInfo}
-                  editMode={editMode}
-                  selectedDate={selectedDate}
-                  onDayTap={handleDayTap}
-                  onEditTap={setEditingPeriod}
-                />
-              </div>
-            );
-          })}
+        <div className="flex items-center gap-2">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-rose-50 text-rose-400 font-semibold border border-rose-100">
+            Open
+          </span>
+          <svg className="w-5 h-5 text-rose-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
         </div>
-      </div>
+      </button>
 
       {/* ── Selected day panel ── */}
-      {selectedDate && !editMode && (
+      {selectedDate && (
         <div className="rounded-3xl bg-white border border-rose-100 shadow-sm p-5 mb-4">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -745,11 +678,7 @@ export function CycleTab() {
       )}
 
       {/* ── Cycle History ── */}
-      <CycleHistory
-        periods={periods}
-        cycleInfo={cycleInfo}
-        onEdit={setEditingPeriod}
-      />
+      <CycleHistory periods={periods} cycleInfo={cycleInfo} onEdit={setEditingPeriod} />
 
       {/* ── Symptom trends ── */}
       <SymptomTrends logs={logs} />
@@ -758,6 +687,83 @@ export function CycleTab() {
       <div className="mt-2">
         <AdBanner slot={import.meta.env.VITE_AD_SLOT_CYCLE} format="horizontal" />
       </div>
+
+      {/* ── Full screen calendar modal ── */}
+      {showCalendarModal && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white sticky top-0">
+            <p className="text-base font-bold text-gray-800">Period Calendar</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => todayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                className="text-xs px-3 py-1.5 rounded-full border border-rose-200 text-rose-400 font-medium"
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setEditMode(m => !m)}
+                className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-all ${
+                  editMode ? 'bg-rose-400 text-white' : 'border border-rose-300 text-rose-400'
+                }`}
+              >
+                {editMode ? 'Done ✓' : '🩸 Edit'}
+              </button>
+              <button
+                onClick={() => { setShowCalendarModal(false); setEditMode(false); }}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold text-lg"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+
+          {editMode && (
+            <div className="px-4 py-2 bg-rose-50 border-b border-rose-100 text-center">
+              <p className="text-xs text-rose-500 font-medium">🩸 Tap any day to mark or unmark as period</p>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2 border-b border-gray-50">
+            {[
+              { color: 'bg-rose-400', label: 'Period' },
+              { color: 'bg-rose-50 border-2 border-dashed border-rose-300', label: 'Predicted' },
+              { color: 'bg-teal-50 border-2 border-teal-300', label: 'Fertile' },
+              { color: 'bg-teal-100 border-2 border-teal-400', label: 'Ovulation' },
+            ].map(l => (
+              <div key={l.label} className="flex items-center gap-1.5">
+                <div className={`w-3 h-3 rounded-full ${l.color}`} />
+                <span className="text-[10px] text-gray-500">{l.label}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 pt-2">
+            {months.map((month) => {
+              const isCurrentMonth = format(month, 'yyyy-MM') === format(new Date(), 'yyyy-MM');
+              return (
+                <div key={format(month, 'yyyy-MM')} ref={isCurrentMonth ? todayRef : undefined}>
+                  <MonthGrid
+                    month={month}
+                    periods={periods}
+                    logs={logs}
+                    cycleInfo={cycleInfo}
+                    editMode={editMode}
+                    selectedDate={selectedDate}
+                    onDayTap={(day) => {
+                      handleDayTap(day);
+                      if (!editMode) {
+                        setSelectedDate(day);
+                        setShowCalendarModal(false);
+                      }
+                    }}
+                    onEditTap={setEditingPeriod}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {showLogModal && selectedDate && (
@@ -778,4 +784,4 @@ export function CycleTab() {
       )}
     </div>
   );
-}
+} 

@@ -458,10 +458,10 @@ export function ProfileTab() {
       </div>
 
       {/* ── Language ── */}
-      <div className="glass rounded-3xl p-5 border border-white/40 space-y-3">
-        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t('profile.language')}</h3>
-        <LanguageSelector variant="full"/>
-      </div>
+     <div className="glass rounded-3xl p-5 border border-white/40 space-y-3" style={{ overflow: 'visible' }}>
+  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t('profile.language')}</h3>
+  <LanguageSelector variant="full"/>
+</div>
 
       {/* ── Birth info ── */}
       <div className="glass rounded-3xl p-5 border border-white/40 space-y-3">

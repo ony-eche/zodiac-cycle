@@ -1,9 +1,9 @@
 import { useUserData } from '../context/UserDataContext';
-import { Progress } from '../components/ui/progress';
 import { Moon, Star, Sparkles, Heart, ChevronRight } from 'lucide-react';
 import { format, addDays, differenceInDays } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { getCachedPredictions } from '../../lib/predictions';
+import { AdBanner } from '../components/AdBanner';
 
 function getZodiacSign(date: Date): string {
   const month = date.getMonth() + 1;
@@ -52,6 +52,7 @@ export function HomeTab({ onNavigateToMessages }: HomeTabProps) {
 
   const cachedPredictions = getCachedPredictions();
   const todayInsight = cachedPredictions?.[0] || null;
+  const isPremium = userData.hasPaid;
 
   return (
     <div className="space-y-4 pb-24">
@@ -66,10 +67,9 @@ export function HomeTab({ onNavigateToMessages }: HomeTabProps) {
         </p>
       </div>
 
-      {/* Cycle ring card — glossy hero */}
+      {/* Cycle ring card */}
       <div className={`glass glossy-hover rounded-3xl p-6 bg-gradient-to-br ${phaseGradients[phaseKey]} border border-white/40`}>
         <div className="flex items-center gap-5">
-          {/* SVG ring */}
           <div className="relative w-22 h-22 flex-shrink-0">
             <svg viewBox="0 0 88 88" className="w-22 h-22 -rotate-90" style={{ width: 88, height: 88 }}>
               <circle cx="44" cy="44" r="38" fill="none" stroke="rgba(192,132,252,0.15)" strokeWidth="7" />
@@ -92,7 +92,6 @@ export function HomeTab({ onNavigateToMessages }: HomeTabProps) {
               <span className="text-[10px] text-muted-foreground">{t('cycle.day')}</span>
             </div>
           </div>
-
           <div className="flex-1">
             <span className={`text-sm font-semibold ${phaseColors[phaseKey]}`}>
               {t(`cycle.phases.${phaseKey}` as any)}
@@ -108,7 +107,6 @@ export function HomeTab({ onNavigateToMessages }: HomeTabProps) {
             </p>
           </div>
         </div>
-        {/* Gradient progress bar */}
         <div className="mt-4 h-1.5 rounded-full bg-white/20 overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-700"
@@ -124,13 +122,12 @@ export function HomeTab({ onNavigateToMessages }: HomeTabProps) {
       {/* 3 stat cards */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { icon: <Moon className="w-5 h-5 text-primary" />, label: t('home.moon'),    value: '🌔', sub: null },
-          { icon: <Sparkles className="w-5 h-5 text-primary" />, label: t('home.transit'), value: todayInsight ? '✦' : '—', sub: null },
+          { icon: <Moon className="w-5 h-5 text-primary" />, label: t('home.moon'), value: '🌔' },
+          { icon: <Sparkles className="w-5 h-5 text-primary" />, label: t('home.transit'), value: todayInsight ? '✦' : '—' },
           {
             icon: <Star className="w-5 h-5 text-primary" />,
             label: t('home.sunSign'),
             value: userData.sun_sign || (userData.dateOfBirth ? getZodiacSign(new Date(userData.dateOfBirth)).split(' ')[1] : '—'),
-            sub: null,
           },
         ].map((item, i) => (
           <div key={i} className="glass glossy rounded-2xl p-4 text-center border border-white/40 card-float">
@@ -199,6 +196,12 @@ export function HomeTab({ onNavigateToMessages }: HomeTabProps) {
           ))}
         </div>
       </div>
+
+      {/* Ad banner — only for free users */}
+      {!isPremium && (
+        <AdBanner slot={import.meta.env.VITE_AD_SLOT_CYCLE} format="horizontal" />
+      )}
+
     </div>
   );
-}
+} 

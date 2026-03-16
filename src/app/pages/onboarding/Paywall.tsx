@@ -92,12 +92,16 @@ function PaymentForm({ onSuccess, onCancel, currency }: {
               </div>
             )}
             <PaymentElement
-              onReady={() => setReady(true)}
-              options={{
-                layout: 'tabs',
-                paymentMethodOrder: ['apple_pay', 'google_pay', 'paypal', 'card'],
-              }}
-            />
+  onReady={() => setReady(true)}
+  options={{
+    layout: 'tabs',
+    paymentMethodOrder: ['apple_pay', 'google_pay', 'card'],
+    wallets: {
+      applePay: 'auto',
+      googlePay: 'auto',
+    },
+  }}
+/> 
           </div>
 
           {error && (
@@ -225,8 +229,10 @@ const stripeAppearance = {
     colorDanger: '#d4183d',
     borderRadius: '12px',
   },
-};
-
+  rules: {
+    '.Link': { display: 'none' },
+  },
+}; 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start px-4 py-8 overflow-y-auto">
       <div className="w-full max-w-md space-y-4 pb-8">

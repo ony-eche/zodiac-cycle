@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { useUserData } from '../context/UserDataContext';
 import { Card } from '../components/ui/card';
-import { Bell, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
-import { differenceInDays } from 'date-fns';
-import { generateDailyPredictions, getCachedPredictions, cachePredictions, type Prediction } from '../../lib/predictions';
+import { RefreshCw, Sparkles, Lock } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../lib/i18n';
 import { cacheTransitSummary } from '../../lib/notifications';
@@ -96,14 +95,19 @@ interface Transit {
   transitSign: string; natalSign: string; intensity: number; color: string; interpretation: string;
 }
 
+const FREE_TRANSIT_LIMIT = 3;
+
 export function TransitsTab() {
   const { userData } = useUserData();
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [transits, setTransits] = useState<Transit[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingAI, setLoadingAI] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+
+  const isPremium = userData.hasPaid;
 
   const cyclePhase = (() => {
     if (!userData.lastPeriodStart) return 'Luteal';
@@ -156,11 +160,14 @@ export function TransitsTab() {
         }
       }
 
-      const top = foundTransits.sort((a, b) => b.intensity - a.intensity).slice(0, 5);
+      const allTransits = foundTransits.sort((a, b) => b.intensity - a.intensity);
+      // Free users get top 3, premium gets all 5
+      const top = isPremium ? allTransits.slice(0, 5) : allTransits.slice(0, FREE_TRANSIT_LIMIT);
+      const total = allTransits.slice(0, 5); // always calculate top 5 for notification cache
 
-      if (top.length > 0) {
-        const topAspect = `${planetNames[top[0].transitPlanet]} ${t(`transits.aspects.${top[0].aspect}` as any)} ${planetNames[top[0].natalPlanet]}`;
-        cacheTransitSummary(top.length, topAspect);
+      if (total.length > 0) {
+        const topAspect = `${planetNames[total[0].transitPlanet]} ${t(`transits.aspects.${total[0].aspect}` as any)} ${planetNames[total[0].natalPlanet]}`;
+        cacheTransitSummary(total.length, topAspect);
       } else {
         cacheTransitSummary(0);
       }
@@ -284,6 +291,49 @@ export function TransitsTab() {
               </div>
             </Card>
           ))}
+
+          {/* Free user upgrade prompt — shown after 3 transits */}
+          {!isPremium && (
+            <div className="rounded-3xl border border-primary/20 overflow-hidden"
+              style={{ background: 'linear-gradient(135deg, rgba(192,132,252,0.08), rgba(244,114,182,0.05))' }}>
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Lock className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">
+                      {Math.max(0, 5 - FREE_TRANSIT_LIMIT)} more transits available
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Upgrade to see all active planetary transits
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {[
+                    '⭐ All 5 active transits revealed',
+                    '🔮 Unlimited daily AI interpretations',
+                    '🌙 Daily cosmic predictions',
+                    '✨ No ads anywhere in the app',
+                  ].map(f => (
+                    <div key={f} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">{f}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => navigate('/onboarding/paywall')}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white text-sm font-bold"
+                  style={{ boxShadow: '0 4px 16px rgba(192,132,252,0.3)' }}
+                >
+                  Unlock All Transits ✦
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -315,7 +365,7 @@ export function TransitsTab() {
         </div>
       </Card>
 
-      {/* Ad banner for free users */}
+      {/* Ad banner — always shown, free and premium */}
       <AdBanner
         slot={import.meta.env.VITE_AD_SLOT_TRANSITS}
         format="horizontal"
@@ -323,4 +373,4 @@ export function TransitsTab() {
       />
     </div>
   );
-}
+} 
