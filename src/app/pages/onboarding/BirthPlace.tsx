@@ -26,22 +26,45 @@ export function BirthPlace() {
   const [showResults, setShowResults] = useState(false);
 
   useEffect(() => {
-    if (place.length < 2 || selected) return;
-    const timeout = setTimeout(async () => {
-      setLoading(true);
+  if (place.length < 2) { setShowResults(false); return; }
+  if (selected && place === `${selected.name}, ${selected.admin1 ? selected.admin1 + ', ' : ''}${selected.country}`) return;
+
+  const timeout = setTimeout(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place)}&count=8&language=en&format=json`,
+        { headers: { 'Accept': 'application/json' } }
+      );
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      setResults(data.results || []);
+      setShowResults(true);
+    } catch {
       try {
-        const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place)}&count=6&language=en&format=json`);
-        const data = await res.json();
-        setResults(data.results || []);
+        const res2 = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(place)}&format=json&limit=6&featuretype=city`,
+          { headers: { 'Accept': 'application/json' } }
+        );
+        const data2 = await res2.json();
+        const mapped = data2.map((r: any) => ({
+          name: r.display_name.split(',')[0],
+          country: r.display_name.split(',').slice(-1)[0].trim(),
+          admin1: r.display_name.split(',')[1]?.trim() || '',
+          latitude: parseFloat(r.lat),
+          longitude: parseFloat(r.lon),
+        }));
+        setResults(mapped);
         setShowResults(true);
       } catch {
         setResults([]);
-      } finally {
-        setLoading(false);
       }
-    }, 400);
-    return () => clearTimeout(timeout);
-  }, [place, selected]);
+    } finally {
+      setLoading(false);
+    }
+  }, 400);
+  return () => clearTimeout(timeout);
+}, [place]);
 
   const handleSelect = (location: LocationResult) => {
     setSelected(location);

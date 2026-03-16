@@ -1,11 +1,12 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { ChevronRight, Edit3, Camera, X, Check, Bell, Mail, Smartphone, Moon, Star, Heart, Settings, User, Shield, LogOut, ChevronLeft } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useUserData } from '../context/UserDataContext';
 import { LanguageSelector } from '../components/LanguageSelector';
-import { ChevronRight, Edit3, Camera, X, Check, Bell, Mail, Smartphone, Moon, Star, Heart, Settings, User, Shield, LogOut, ChevronLeft } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
+import { requestPushPermission, unsubscribeFromPush, isPushSubscribed, saveNotificationPreferences } from '../../lib/notifications-push';
 
 // ─── Avatar Picker ────────────────────────────────────────────────────────────
 const AVATAR_EMOJIS = [
@@ -191,8 +192,8 @@ function EditProfileModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ─── Notification Settings ────────────────────────────────────────────────────
 function NotificationSettings({ onBack }: { onBack: () => void }) {
+  const { userData } = useUserData();
   const { t } = useTranslation();
   const [settings, setSettings] = useState(() => {
     const saved = localStorage.getItem('zodiac_notif_settings');
@@ -203,23 +204,73 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
       frequency: 'daily',
     };
   });
+  const [pushStatus, setPushStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const update = (key: string, value: any) => {
+  useEffect(() => {
+    isPushSubscribed().then(subscribed => {
+      if (subscribed) setPushStatus('granted');
+      else if (Notification.permission === 'denied') setPushStatus('denied');
+      else setPushStatus('unknown');
+    });
+  }, []);
+
+  const update = async (key: string, value: any) => {
     const next = { ...settings, [key]: value };
     setSettings(next);
     localStorage.setItem('zodiac_notif_settings', JSON.stringify(next));
+
+    // Handle push toggle
+    if (key === 'push') {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      if (value) {
+        const ok = await requestPushPermission(user.id);
+        if (!ok) {
+          setSettings({ ...next, push: false });
+          localStorage.setItem('zodiac_notif_settings', JSON.stringify({ ...next, push: false }));
+          alert('Push notifications blocked. Please enable them in your browser settings.');
+          return;
+        }
+        setPushStatus('granted');
+      } else {
+        await unsubscribeFromPush(user.id);
+        setPushStatus('unknown');
+      }
+    }
+
+    // Save all preferences to Supabase via worker
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await saveNotificationPreferences(user.id, next);
+    }
   };
 
-  const Toggle = ({ k, label, sub }: { k: string; label: string; sub?: string }) => (
-    <div className="flex items-center justify-between py-3 border-b border-white/10 last:border-0">
+  const handleSave = async () => {
+    setSaving(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await saveNotificationPreferences(user.id, settings);
+    }
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const Toggle = ({ k, label, sub, disabled }: { k: string; label: string; sub?: string; disabled?: boolean }) => (
+    <div className={`flex items-center justify-between py-3 border-b border-white/10 last:border-0 ${disabled ? 'opacity-40' : ''}`}>
       <div>
         <p className="text-sm font-medium">{label}</p>
         {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
       </div>
-      <button onClick={() => update(k, !settings[k])}
-        className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[k] ? 'bg-primary' : 'bg-border'}`}>
+      <button
+        disabled={disabled}
+        onClick={() => !disabled && update(k, !settings[k])}
+        className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[k] ? 'bg-primary' : 'bg-border'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+      >
         <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${settings[k] ? 'left-6' : 'left-0.5'}`}
-          style={{ boxShadow: settings[k] ? '0 0 8px rgba(192,132,252,0.5)' : undefined }}/>
+          style={{ boxShadow: settings[k] ? '0 0 8px rgba(192,132,252,0.5)' : undefined }} />
       </button>
     </div>
   );
@@ -228,42 +279,70 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
     <div className="space-y-4 pb-24">
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="p-2 hover:bg-white/20 rounded-xl transition-colors">
-          <ChevronLeft className="w-5 h-5 text-muted-foreground"/>
+          <ChevronLeft className="w-5 h-5 text-muted-foreground" />
         </button>
         <h2 className="text-2xl font-medium">Notification Settings</h2>
       </div>
+
+      {/* Push status banner */}
+      {pushStatus === 'denied' && (
+        <div className="glass rounded-2xl p-4 border border-amber-300/50 bg-amber-50/10">
+          <p className="text-sm text-amber-400 font-medium">⚠️ Push notifications are blocked</p>
+          <p className="text-xs text-muted-foreground mt-1">Enable them in your browser settings to receive period and ovulation reminders.</p>
+        </div>
+      )}
 
       {/* Delivery channels */}
       <div className="glass rounded-3xl p-5 border border-white/40">
         <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-4">How to notify you</h3>
         <div className="space-y-1">
           {[
-            { k: 'push',  icon: <Smartphone className="w-4 h-4 text-primary"/>,  label: 'Push Notifications',  sub: 'On your device' },
-            { k: 'email', icon: <Mail className="w-4 h-4 text-primary"/>,         label: 'Email Notifications', sub: 'Weekly digest' },
-            { k: 'inApp', icon: <Bell className="w-4 h-4 text-primary"/>,         label: 'In-App Notifications', sub: 'Bell icon in dashboard' },
+            {
+              k: 'push',
+              icon: <Smartphone className="w-4 h-4 text-primary" />,
+              label: 'Push Notifications',
+              sub: pushStatus === 'granted' ? '✅ Active on this device' : 'Tap to enable on this device',
+            },
+            {
+              k: 'email',
+              icon: <Mail className="w-4 h-4 text-primary" />,
+              label: 'Email Notifications',
+              sub: userData.email || 'Period reminders & weekly digest',
+            },
+            {
+              k: 'inApp',
+              icon: <Bell className="w-4 h-4 text-primary" />,
+              label: 'In-App Notifications',
+              sub: 'Bell icon in dashboard',
+            },
           ].map(item => (
             <div key={item.k} className="flex items-center justify-between py-3 border-b border-white/10 last:border-0">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-xl glass border border-white/30 flex items-center justify-center">{item.icon}</div>
-                <div><p className="text-sm font-medium">{item.label}</p><p className="text-xs text-muted-foreground">{item.sub}</p></div>
+                <div>
+                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className="text-xs text-muted-foreground">{item.sub}</p>
+                </div>
               </div>
-              <button onClick={() => update(item.k, !settings[item.k])}
-                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[item.k] ? 'bg-primary' : 'bg-border'}`}>
-                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${settings[item.k] ? 'left-6' : 'left-0.5'}`}/>
+              <button
+                onClick={() => update(item.k, !settings[item.k])}
+                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[item.k] ? 'bg-primary' : 'bg-border'}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${settings[item.k] ? 'left-6' : 'left-0.5'}`} />
               </button>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Notification types */}
+      {/* What to notify */}
       <div className="glass rounded-3xl p-5 border border-white/40">
         <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-4">What to notify you about</h3>
-        <Toggle k="periodReminder"  label="🔴 Period Reminder"    sub="3 days before your period" />
-        <Toggle k="ovulationAlert"  label="🌕 Ovulation Window"   sub="When you enter your fertile window" />
-        <Toggle k="phaseChange"     label="✨ Phase Changes"       sub="When your cycle phase shifts" />
-        <Toggle k="dailyInsights"   label="🔮 Daily Insights"      sub="New AI predictions available" />
-        <Toggle k="transitAlerts"   label="⭐ Transit Alerts"      sub="Significant planetary transits" />
+        <Toggle k="periodReminder" label="🔴 Period Reminder" sub="3 days before your period" />
+        <Toggle k="ovulationAlert" label="🌿 Fertile Window" sub="When your fertile window starts" />
+        <Toggle k="phaseChange" label="✨ Phase Changes" sub="When your cycle phase shifts" />
+        <Toggle k="dailyInsights" label="🔮 Daily Insights" sub="New AI predictions available" />
+        <Toggle k="transitAlerts" label="⭐ Transit Alerts" sub="Significant planetary transits" />
       </div>
 
       {/* Frequency */}
@@ -272,19 +351,29 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
         <div className="grid grid-cols-3 gap-2">
           {['daily', 'weekly', 'minimal'].map(f => (
             <button key={f} onClick={() => update('frequency', f)}
-              className={`py-3 rounded-2xl text-xs font-semibold capitalize transition-all border-2 ${
-                settings.frequency === f
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-white/30 glass text-muted-foreground hover:border-primary/30'
-              }`}>{f}</button>
+              className={`py-3 rounded-2xl text-xs font-semibold capitalize transition-all border-2 ${settings.frequency === f ? 'border-primary bg-primary/10 text-primary' : 'border-white/30 glass text-muted-foreground hover:border-primary/30'}`}>
+              {f}
+            </button>
           ))}
         </div>
         <p className="text-xs text-muted-foreground mt-2">
           {settings.frequency === 'daily' && 'Receive notifications daily as events occur'}
-          {settings.frequency === 'weekly' && 'Weekly summary of your cycle & cosmic insights'}
-          {settings.frequency === 'minimal' && 'Only the most important alerts (period + ovulation)'}
+          {settings.frequency === 'weekly' && 'Weekly summary every Monday morning'}
+          {settings.frequency === 'minimal' && 'Only period and ovulation alerts'}
         </p>
       </div>
+
+      {/* Save button */}
+      <button onClick={handleSave} disabled={saving}
+        className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold btn-glow flex items-center justify-center gap-2">
+        {saving ? (
+          <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving...</>
+        ) : saved ? (
+          <><Check className="w-4 h-4" /> Saved!</>
+        ) : (
+          'Save Preferences'
+        )}
+      </button>
     </div>
   );
 }
@@ -419,11 +508,13 @@ export function ProfileTab() {
             {userData.hasPaid ? t('profile.premium') : t('profile.free')}
           </span>
         </div>
-        {!userData.hasPaid && (
-          <button className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold btn-glow">
-            {t('profile.upgrade')}
-          </button>
-        )}
+       {!userData.hasPaid && (
+  <button
+    onClick={() => navigate('/onboarding/paywall')}
+    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold btn-glow">
+    {t('profile.upgrade')} ✦
+  </button>
+)}
       </div>
 
       {/* ── Settings menu ── */}
@@ -436,23 +527,23 @@ export function ProfileTab() {
             action: () => setView('notifications'),
           },
           {
-            icon: <Shield className="w-4 h-4 text-primary"/>,
-            label: t('profile.privacy'),
-            sub: 'How we use your data',
-            href: 'https://zodiaclycle.com/privacy',
-          },
-          {
-            icon: <Star className="w-4 h-4 text-primary"/>,
-            label: t('profile.terms'),
-            sub: 'Terms of service',
-            href: 'https://zodiaclycle.com/terms',
-          },
-          {
-            icon: <Heart className="w-4 h-4 text-primary"/>,
-            label: t('profile.contactSupport'),
-            sub: 'Get help or share feedback',
-            href: 'mailto:support@zodiaclycle.com',
-          },
+  icon: <Shield className="w-4 h-4 text-primary"/>,
+  label: t('profile.privacy'),
+  sub: 'How we use your data',
+  href: '/privacy.html',
+},
+{
+  icon: <Star className="w-4 h-4 text-primary"/>,
+  label: t('profile.terms'),
+  sub: 'Terms of service',
+  href: '/terms.html',
+},
+{
+  icon: <Heart className="w-4 h-4 text-primary"/>,
+  label: t('profile.contactSupport'),
+  sub: 'Get help or share feedback',
+  href: 'mailto:support@zodiaccycle.app',
+},
         ].map((item, i) => (
           <div key={item.label}>
             {item.href ? (

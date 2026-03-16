@@ -2,5 +2,9 @@ name = "zodiac-worker"
 main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
+[triggers]
+crons = ["0 8 * * *"]
+
 [vars]
 ALLOWED_ORIGIN = "http://localhost:5174"
+SUPABASE_URL = "https://owmmrkowqkjbrimazftv.supabase.co"

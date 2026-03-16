@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { useUserData } from '../context/UserDataContext';
 import { Card } from '../components/ui/card';
-import { format } from 'date-fns';
-import { RefreshCw, Sparkles } from 'lucide-react';
+import { Bell, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
+import { differenceInDays } from 'date-fns';
+import { generateDailyPredictions, getCachedPredictions, cachePredictions, type Prediction } from '../../lib/predictions';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../lib/i18n';
 import { cacheTransitSummary } from '../../lib/notifications';
+import { AdBanner } from '../components/AdBanner';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const SUPABASE_URL = 'https://owmmrkowqkjbrimazftv.supabase.co/functions/v1';
@@ -155,7 +158,6 @@ export function TransitsTab() {
 
       const top = foundTransits.sort((a, b) => b.intensity - a.intensity).slice(0, 5);
 
-      // Cache transit summary for notifications
       if (top.length > 0) {
         const topAspect = `${planetNames[top[0].transitPlanet]} ${t(`transits.aspects.${top[0].aspect}` as any)} ${planetNames[top[0].natalPlanet]}`;
         cacheTransitSummary(top.length, topAspect);
@@ -163,7 +165,12 @@ export function TransitsTab() {
         cacheTransitSummary(0);
       }
 
-      if (top.length === 0) { setTransits([]); setLoading(false); setLastUpdated(format(new Date(), 'h:mm a')); return; }
+      if (top.length === 0) {
+        setTransits([]);
+        setLoading(false);
+        setLastUpdated(format(new Date(), 'h:mm a'));
+        return;
+      }
 
       setTransits(top.map(tr => ({ ...tr, interpretation: '...' })));
       setLoading(false);
@@ -213,16 +220,25 @@ export function TransitsTab() {
 
       {loading && (
         <Card className="p-8 border-border flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center"><Sparkles className="w-6 h-6 text-primary animate-pulse" /></div>
+          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+            <Sparkles className="w-6 h-6 text-primary animate-pulse" />
+          </div>
           <p className="text-sm font-medium">{t('transits.scanning')}</p>
-          <div className="flex gap-1">{[0,1,2].map(i => <div key={i} className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: `${i*0.15}s` }} />)}</div>
+          <div className="flex gap-1">
+            {[0,1,2].map(i => (
+              <div key={i} className="w-2 h-2 rounded-full bg-primary animate-bounce"
+                style={{ animationDelay: `${i*0.15}s` }}/>
+            ))}
+          </div>
         </Card>
       )}
 
       {error && !loading && (
         <Card className="p-5 border-rose-200 bg-rose-50">
           <p className="text-sm text-rose-600">{error}</p>
-          <button onClick={loadTransits} className="text-xs text-rose-500 underline mt-2">{t('common.retry')}</button>
+          <button onClick={loadTransits} className="text-xs text-rose-500 underline mt-2">
+            {t('common.retry')}
+          </button>
         </Card>
       )}
 
@@ -244,17 +260,24 @@ export function TransitsTab() {
                         {t(`transits.aspects.${tr.aspect}` as any)} · natal {tr.natalSign}
                       </p>
                     </div>
-                    <span className="text-xs bg-accent/40 px-2 py-0.5 rounded-full">{t('transits.activeNow')}</span>
+                    <span className="text-xs bg-accent/40 px-2 py-0.5 rounded-full">
+                      {t('transits.activeNow')}
+                    </span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
                     {tr.interpretation === '...' && loadingAI ? (
                       <span className="flex items-center gap-1">
-                        {[0,1,2].map(i => <span key={i} className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block" style={{ animationDelay: `${i*0.2}s` }} />)}
+                        {[0,1,2].map(i => (
+                          <span key={i} className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block"
+                            style={{ animationDelay: `${i*0.2}s` }}/>
+                        ))}
                       </span>
                     ) : tr.interpretation}
                   </p>
                   <div className="flex gap-1 mt-3 items-center">
-                    {[...Array(5)].map((_, j) => <div key={j} className={`h-1.5 flex-1 rounded-full ${j < tr.intensity ? 'bg-primary' : 'bg-border'}`} />)}
+                    {[...Array(5)].map((_, j) => (
+                      <div key={j} className={`h-1.5 flex-1 rounded-full ${j < tr.intensity ? 'bg-primary' : 'bg-border'}`}/>
+                    ))}
                     <span className="text-xs text-muted-foreground ml-2">{t('transits.intensity')}</span>
                   </div>
                 </div>
@@ -291,6 +314,13 @@ export function TransitsTab() {
           ))}
         </div>
       </Card>
+
+      {/* Ad banner for free users */}
+      <AdBanner
+        slot={import.meta.env.VITE_AD_SLOT_TRANSITS}
+        format="horizontal"
+        className="mt-2 mb-4"
+      />
     </div>
   );
 }
