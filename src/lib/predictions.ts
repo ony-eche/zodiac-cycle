@@ -135,7 +135,7 @@ Respond entirely in ${language}.
       id: `cosmic-${Date.now()}`,
       date: format(new Date(), 'MMMM d'),
       title: l('cosmicTitle'),
-      preview: cosmicText.split('.')[0] + '.',
+      preview: cosmicText.length > 120 ? cosmicText.slice(0, 120).trim() + '...' : cosmicText, 
       full: cosmicText,
       tag: l('cosmicTag'),
       tagColor: 'bg-primary/20 text-primary',
@@ -158,7 +158,7 @@ Respond entirely in ${language}.
       id: `cycle-${Date.now() + 1}`,
       date: format(new Date(), 'MMMM d'),
       title: phaseTitle,
-      preview: cycleText.split('.')[0] + '.',
+      preview: cosmicText.length > 120 ? cosmicText.slice(0, 120).trim() + '...' : cosmicText,
       full: cycleText,
       tag: l('cycleTag'),
       tagColor: 'bg-rose-100 text-rose-600',
@@ -180,7 +180,7 @@ Respond entirely in ${language}.
       id: `wellness-${Date.now() + 2}`,
       date: format(new Date(), 'MMMM d'),
       title: l('wellnessTitle'),
-      preview: wellnessText.split('.')[0] + '.',
+      preview: cosmicText.length > 120 ? cosmicText.slice(0, 120).trim() + '...' : cosmicText,
       full: wellnessText,
       tag: l('wellnessTag'),
       tagColor: 'bg-green-100 text-green-700',
@@ -203,8 +203,10 @@ export function getCachedPredictions(): Prediction[] | null {
     const { date, predictions, lang } = JSON.parse(cached);
     const today = format(new Date(), 'yyyy-MM-dd');
     const currentLang = i18n.language?.split('-')[0] || 'en';
-    if (date !== today) return null;
-    if (lang !== currentLang) return null;
+    if (date !== today || lang !== currentLang) {
+      localStorage.removeItem('zodiac_predictions'); // clear stale cache
+      return null;
+    }
     return predictions;
   } catch {
     return null;

@@ -27,6 +27,17 @@ const ASPECT_ORBS: Record<string, number> = {
   conjunction: 8, opposition: 8, trine: 6, square: 6, sextile: 4,
 };
 
+const SIGN_TRANSLATIONS: Record<string, Record<string, string>> = {
+  French: { Aries: 'Bélier', Taurus: 'Taureau', Gemini: 'Gémeaux', Cancer: 'Cancer', Leo: 'Lion', Virgo: 'Vierge', Libra: 'Balance', Scorpio: 'Scorpion', Sagittarius: 'Sagittaire', Capricorn: 'Capricorne', Aquarius: 'Verseau', Pisces: 'Poissons' },
+  German: { Aries: 'Widder', Taurus: 'Stier', Gemini: 'Zwillinge', Cancer: 'Krebs', Leo: 'Löwe', Virgo: 'Jungfrau', Libra: 'Waage', Scorpio: 'Skorpion', Sagittarius: 'Schütze', Capricorn: 'Steinbock', Aquarius: 'Wassermann', Pisces: 'Fische' },
+  Spanish: { Aries: 'Aries', Taurus: 'Tauro', Gemini: 'Géminis', Cancer: 'Cáncer', Leo: 'Leo', Virgo: 'Virgo', Libra: 'Libra', Scorpio: 'Escorpio', Sagittarius: 'Sagitario', Capricorn: 'Capricornio', Aquarius: 'Acuario', Pisces: 'Piscis' },
+  Portuguese: { Aries: 'Áries', Taurus: 'Touro', Gemini: 'Gêmeos', Cancer: 'Câncer', Leo: 'Leão', Virgo: 'Virgem', Libra: 'Libra', Scorpio: 'Escorpião', Sagittarius: 'Sagitário', Capricorn: 'Capricórnio', Aquarius: 'Aquário', Pisces: 'Peixes' },
+};
+
+function translateSign(sign: string, language: string): string {
+  return SIGN_TRANSLATIONS[language]?.[sign] || sign;
+}
+
 function getSignDegree(sign: string, degree: number): number {
   const SIGNS = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
   return SIGNS.indexOf(sign) * 30 + degree;
@@ -74,30 +85,48 @@ async function getTransitInterpretation(
   sunSign: string, moonSign: string,
   planetNames: Record<string, string>, language: string,
 ): Promise<string> {
+  // Always use English names in the astrological query for accuracy
+  const ENGLISH_PLANETS: Record<string, string> = {
+    sun: 'Sun', moon: 'Moon', mercury: 'Mercury', venus: 'Venus',
+    mars: 'Mars', jupiter: 'Jupiter', saturn: 'Saturn',
+  };
+  const tPlanet = ENGLISH_PLANETS[transitPlanet] || transitPlanet;
+  const nPlanet = ENGLISH_PLANETS[natalPlanet] || natalPlanet;
+
   try {
     const response = await fetch(`${WORKER_URL}/ai/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        system: `You are ZodiacCycle's astrologer. Give brief, specific transit interpretations (2 sentences max) connecting planetary transits to menstrual cycle effects. Be warm, practical, specific. No generic horoscope language. CRITICAL: Respond entirely in ${language}.`,
+        system: `You are ZodiacCycle's personal astrologer. Write warm, specific, personal transit interpretations that connect planetary transits to the user's menstrual cycle and daily life. Be like a knowledgeable friend — practical, insightful, never generic. Maximum 2 sentences. Never say "this transit is active in your chart". CRITICAL: Write your ENTIRE response in ${language}. Every word must be in ${language}.`,
         messages: [{
           role: 'user',
-          content: `Transit: ${planetNames[transitPlanet] || transitPlanet} in ${transitSign} ${aspect} natal ${planetNames[natalPlanet] || natalPlanet} in ${natalSign}. User has Sun in ${sunSign}, Moon in ${moonSign}. Current cycle phase: ${cyclePhase}. How does this transit affect their body, mood, and cycle this week? 2 sentences max. Respond in ${language}.`,
+          content: `${tPlanet} in ${transitSign} is forming a ${aspect} with this person's natal ${nPlanet} in ${natalSign}. They have Sun in ${sunSign} and Moon in ${moonSign}, currently in their ${cyclePhase} phase. What specific effect does this transit have on their body, mood, and energy this week? Be warm and personal. 2 sentences max. Respond in ${language}.`,
         }],
       }),
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      console.error('Transit AI HTTP error:', response.status, await response.text());
+      throw new Error(`HTTP ${response.status}`);
+    }
     const data = await response.json();
-    // Handle both response formats
-    const text = data.content?.[0]?.text || data.content?.[0]?.value || data.text || '';
-    if (!text || text.trim().length === 0) throw new Error('Empty response');
-    return text.trim();
+    const text = data.content?.[0]?.text?.trim() || '';
+    if (!text || text.length < 10) throw new Error('Empty or too short response');
+    return text;
   } catch (err) {
     console.error('Transit AI error:', err);
-    // Return a meaningful fallback based on the actual transit
-    return `${planetNames[transitPlanet] || transitPlanet} in ${transitSign} forms a ${aspect} with your natal ${planetNames[natalPlanet] || natalPlanet}. This transit is active in your chart right now.`;
+    // Meaningful fallback that at least describes the transit
+    const aspectMeanings: Record<string, string> = {
+      conjunction: 'merges powerfully with',
+      trine: 'flows harmoniously with',
+      square: 'creates dynamic tension with',
+      opposition: 'brings awareness to',
+      sextile: 'opens opportunities through',
+    };
+    const meaning = aspectMeanings[aspect] || 'aspects';
+    return `${tPlanet} in ${transitSign} ${meaning} your natal ${nPlanet} in ${natalSign} this week. Open the app to refresh for your personalised interpretation.`;
   }
-}
+} 
 
 interface Transit {
   id: string; transitPlanet: string; natalPlanet: string; aspect: string; aspectSymbol: string;
@@ -272,10 +301,10 @@ export function TransitsTab() {
                       <p className="font-medium text-sm">
                         {planetNames[tr.transitPlanet]} in {tr.transitSign}
                         {' '}<span className="text-muted-foreground">{tr.aspectSymbol}</span>{' '}
-                        natal {planetNames[tr.natalPlanet]}
+                        natal {planetNames[tr.transitPlanet]} in {translateSign(tr.transitSign, language)}
                       </p>
                       <p className="text-xs text-muted-foreground capitalize">
-                        {t(`transits.aspects.${tr.aspect}` as any)} · natal {tr.natalSign}
+                        {t(`transits.aspects.${tr.aspect}` as any)} · natal {translateSign(tr.natalSign, language)}
                       </p>
                     </div>
                     <span className="text-xs bg-accent/40 px-2 py-0.5 rounded-full">
