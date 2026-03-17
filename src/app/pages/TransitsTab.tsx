@@ -10,7 +10,6 @@ import { cacheTransitSummary } from '../../lib/notifications';
 import { AdBanner } from '../components/AdBanner';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
-const SUPABASE_URL = 'https://owmmrkowqkjbrimazftv.supabase.co/functions/v1';
 
 const LANGUAGE_NAMES: Record<string, string> = {
   en: 'English', de: 'German', fr: 'French', es: 'Spanish', pt: 'Portuguese',
@@ -63,7 +62,7 @@ function getIntensity(aspect: string, orb: number): number {
 }
 
 async function fetchCurrentPlanetPositions() {
-  const url = `${SUPABASE_URL}/chart2?datetime=${encodeURIComponent(new Date().toISOString())}&coordinates=0,0`;
+  const url = `${WORKER_URL}/chart?datetime=${encodeURIComponent(new Date().toISOString())}&coordinates=0,0`;
   const res = await fetch(url);
   const json = await res.json();
   return json.data as Record<string, { sign: string; degree: number; house: number }>;
@@ -75,19 +74,29 @@ async function getTransitInterpretation(
   sunSign: string, moonSign: string,
   planetNames: Record<string, string>, language: string,
 ): Promise<string> {
-  const response = await fetch(`${WORKER_URL}/ai/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system: `You are ZodiacCycle's astrologer. Give brief, specific transit interpretations (2 sentences max) connecting planetary transits to menstrual cycle effects. Be warm, practical, specific. No generic horoscope language. CRITICAL: Respond entirely in ${language}.`,
-      messages: [{
-        role: 'user',
-        content: `Transit: ${planetNames[transitPlanet] || transitPlanet} in ${transitSign} ${aspect} natal ${planetNames[natalPlanet] || natalPlanet} in ${natalSign}.\nUser has Sun in ${sunSign}, Moon in ${moonSign}.\nCurrent cycle phase: ${cyclePhase}.\nHow does this transit affect their body, mood, and cycle this week? 2 sentences max. Respond in ${language}.`,
-      }],
-    }),
-  });
-  const data = await response.json();
-  return data.content?.[0]?.text || 'This transit activates your natal energy in meaningful ways.';
+  try {
+    const response = await fetch(`${WORKER_URL}/ai/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: `You are ZodiacCycle's astrologer. Give brief, specific transit interpretations (2 sentences max) connecting planetary transits to menstrual cycle effects. Be warm, practical, specific. No generic horoscope language. CRITICAL: Respond entirely in ${language}.`,
+        messages: [{
+          role: 'user',
+          content: `Transit: ${planetNames[transitPlanet] || transitPlanet} in ${transitSign} ${aspect} natal ${planetNames[natalPlanet] || natalPlanet} in ${natalSign}. User has Sun in ${sunSign}, Moon in ${moonSign}. Current cycle phase: ${cyclePhase}. How does this transit affect their body, mood, and cycle this week? 2 sentences max. Respond in ${language}.`,
+        }],
+      }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    // Handle both response formats
+    const text = data.content?.[0]?.text || data.content?.[0]?.value || data.text || '';
+    if (!text || text.trim().length === 0) throw new Error('Empty response');
+    return text.trim();
+  } catch (err) {
+    console.error('Transit AI error:', err);
+    // Return a meaningful fallback based on the actual transit
+    return `${planetNames[transitPlanet] || transitPlanet} in ${transitSign} forms a ${aspect} with your natal ${planetNames[natalPlanet] || natalPlanet}. This transit is active in your chart right now.`;
+  }
 }
 
 interface Transit {
@@ -134,11 +143,11 @@ export function TransitsTab() {
     try {
       const current = await fetchCurrentPlanetPositions();
       const natal: Record<string, { sign: string; degree: number }> = {
-        sun: { sign: userData.sun_sign || '', degree: 15 },
-        moon: { sign: userData.moon_sign || '', degree: 15 },
+        sun:     { sign: userData.sun_sign     || '', degree: 15 },
+        moon:    { sign: userData.moon_sign    || '', degree: 15 },
         mercury: { sign: userData.mercury_sign || '', degree: 15 },
-        venus: { sign: userData.venus_sign || '', degree: 15 },
-        mars: { sign: userData.mars_sign || '', degree: 15 },
+        venus:   { sign: userData.venus_sign   || '', degree: 15 },
+        mars:    { sign: userData.mars_sign    || '', degree: 15 },
       };
 
       const foundTransits: Omit<Transit, 'interpretation'>[] = [];
@@ -146,7 +155,7 @@ export function TransitsTab() {
         if (!current[tp]) continue;
         const tLon = getSignDegree(current[tp].sign, current[tp].degree);
         for (const np of ['sun','moon','venus','mars','mercury']) {
-          if (!natal[np].sign) continue;
+          if (!natal[np]?.sign) continue;
           const nLon = getSignDegree(natal[np].sign, natal[np].degree);
           const aspect = getAspect(tLon, nLon);
           if (aspect) foundTransits.push({
@@ -161,9 +170,8 @@ export function TransitsTab() {
       }
 
       const allTransits = foundTransits.sort((a, b) => b.intensity - a.intensity);
-      // Free users get top 3, premium gets all 5
       const top = isPremium ? allTransits.slice(0, 5) : allTransits.slice(0, FREE_TRANSIT_LIMIT);
-      const total = allTransits.slice(0, 5); // always calculate top 5 for notification cache
+      const total = allTransits.slice(0, 5);
 
       if (total.length > 0) {
         const topAspect = `${planetNames[total[0].transitPlanet]} ${t(`transits.aspects.${total[0].aspect}` as any)} ${planetNames[total[0].natalPlanet]}`;
@@ -183,19 +191,22 @@ export function TransitsTab() {
       setLoading(false);
       setLoadingAI(true);
 
-      const withAI = await Promise.all(top.map(async tr => {
+      // Load AI interpretations one by one and update state as each arrives
+      const results: Transit[] = top.map(tr => ({ ...tr, interpretation: '...' }));
+      await Promise.all(top.map(async (tr, idx) => {
         const interp = await getTransitInterpretation(
           tr.transitPlanet, tr.natalPlanet, tr.aspect,
           tr.transitSign, tr.natalSign, cyclePhase,
           userData.sun_sign || '', userData.moon_sign || '',
           planetNames, language,
         );
-        return { ...tr, interpretation: interp };
+        results[idx] = { ...tr, interpretation: interp };
+        setTransits([...results]);
       }));
 
-      setTransits(withAI);
       setLastUpdated(format(new Date(), 'h:mm a'));
-    } catch {
+    } catch (err) {
+      console.error('Transit load error:', err);
       setError(t('common.error'));
     } finally {
       setLoading(false);
@@ -272,7 +283,7 @@ export function TransitsTab() {
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
-                    {tr.interpretation === '...' && loadingAI ? (
+                    {tr.interpretation === '...' ? (
                       <span className="flex items-center gap-1">
                         {[0,1,2].map(i => (
                           <span key={i} className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse inline-block"
@@ -292,7 +303,7 @@ export function TransitsTab() {
             </Card>
           ))}
 
-          {/* Free user upgrade prompt — shown after 3 transits */}
+          {/* Free user upgrade prompt */}
           {!isPremium && (
             <div className="rounded-3xl border border-primary/20 overflow-hidden"
               style={{ background: 'linear-gradient(135deg, rgba(192,132,252,0.08), rgba(244,114,182,0.05))' }}>
@@ -303,33 +314,26 @@ export function TransitsTab() {
                   </div>
                   <div>
                     <p className="text-sm font-bold">
-                      {Math.max(0, 5 - FREE_TRANSIT_LIMIT)} more transits available
+                      {Math.max(0, 5 - FREE_TRANSIT_LIMIT)} {t('premium.moreTransits')}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Upgrade to see all active planetary transits
+                      {t('premium.transitLockedSub')}
                     </p>
                   </div>
                 </div>
-
                 <div className="space-y-2">
-                  {[
-                    '⭐ All 5 active transits revealed',
-                    '🔮 Unlimited daily AI interpretations',
-                    '🌙 Daily cosmic predictions',
-                    '✨ No ads anywhere in the app',
-                  ].map(f => (
+                  {(['feature6','feature3','feature2','feature5'] as const).map(f => (
                     <div key={f} className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{f}</span>
+                      <span className="text-xs text-muted-foreground">{t(`premium.${f}`)}</span>
                     </div>
                   ))}
                 </div>
-
                 <button
                   onClick={() => navigate('/onboarding/paywall')}
                   className="w-full py-3 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white text-sm font-bold"
                   style={{ boxShadow: '0 4px 16px rgba(192,132,252,0.3)' }}
                 >
-                  Unlock All Transits ✦
+                  {t('premium.unlockTransits')}
                 </button>
               </div>
             </div>
@@ -365,7 +369,6 @@ export function TransitsTab() {
         </div>
       </Card>
 
-      {/* Ad banner — always shown, free and premium */}
       <AdBanner
         slot={import.meta.env.VITE_AD_SLOT_TRANSITS}
         format="horizontal"

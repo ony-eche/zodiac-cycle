@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useUserData } from '../context/UserDataContext';
 import { Card } from '../components/ui/card';
-import { Bell, ChevronRight, RefreshCw, Sparkles, Lock } from 'lucide-react';
+import { Bell, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
 import { differenceInDays } from 'date-fns';
 import { generateDailyPredictions, getCachedPredictions, cachePredictions, type Prediction } from '../../lib/predictions';
 import { useTranslation } from 'react-i18next';
@@ -33,50 +33,6 @@ export function MessagesTab() {
   const cyclePhase = getCyclePhase(cycleDay);
   const isPremium = userData.hasPaid;
 
-  // ── Premium gate — show upgrade screen for free users ─────────────────────
-  if (!isPremium) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[70vh] space-y-6 px-4 pb-24">
-        <div className="text-center space-y-3">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-secondary/10 flex items-center justify-center mx-auto">
-            <Sparkles className="w-10 h-10 text-primary" />
-          </div>
-          <h2 className="text-2xl font-bold">Daily Cosmic Insights</h2>
-          <p className="text-muted-foreground text-sm max-w-xs mx-auto leading-relaxed">
-            Unlock personalised daily predictions combining your natal chart with your current cycle phase.
-          </p>
-        </div>
-
-        <div className="glass rounded-3xl p-5 border border-white/40 w-full space-y-3">
-          {[
-            '🔮 Daily AI-powered natal chart readings',
-            '🌙 Cycle phase + astrology combined',
-            '⭐ Transit interpretations personalised to you',
-            '💫 Unlimited refreshes every day',
-            '✨ No ads across the entire app',
-          ].map(f => (
-            <div key={f} className="flex items-center gap-3">
-              <span className="text-sm">{f}</span>
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={() => navigate('/onboarding/paywall')}
-          className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-base"
-          style={{ boxShadow: '0 4px 24px rgba(192,132,252,0.4)' }}
-        >
-          Unlock Premium ✦
-        </button>
-
-        <p className="text-xs text-muted-foreground text-center">
-          €0.99 trial · then €5.49/mo · Cancel anytime
-        </p>
-      </div>
-    );
-  }
-
-  // ── Premium content ────────────────────────────────────────────────────────
   const loadPredictions = async (forceRefresh = false) => {
     if (!forceRefresh) {
       const cached = getCachedPredictions();
@@ -100,11 +56,47 @@ export function MessagesTab() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => { loadPredictions(); }, []);
+  useEffect(() => {
+    if (isPremium) loadPredictions();
+  }, [isPremium]);
 
   const unreadCount = messages.filter(m => m.unread).length;
 
+  // ── Premium gate ───────────────────────────────────────────────────────────
+  if (!isPremium) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70vh] space-y-6 px-4 pb-24">
+        <div className="text-center space-y-3">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary/20 to-secondary/10 flex items-center justify-center mx-auto">
+            <Sparkles className="w-10 h-10 text-primary" />
+          </div>
+          <h2 className="text-2xl font-bold">{t('premium.dailyInsightsTitle')}</h2>
+          <p className="text-muted-foreground text-sm max-w-xs mx-auto leading-relaxed">
+            {t('premium.dailyInsightsSub')}
+          </p>
+        </div>
+        <div className="glass rounded-3xl p-5 border border-white/40 w-full space-y-3">
+          {(['feature1','feature2','feature3','feature4','feature5'] as const).map(f => (
+            <div key={f} className="flex items-center gap-3">
+              <span className="text-sm">{t(`premium.${f}` as any)}</span>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={() => navigate('/onboarding/paywall')}
+          className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold text-base"
+          style={{ boxShadow: '0 4px 24px rgba(192,132,252,0.4)' }}
+        >
+          {t('premium.unlockPremium')}
+        </button>
+        <p className="text-xs text-muted-foreground text-center">
+          {t('premium.trialNote')}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Premium content ────────────────────────────────────────────────────────
   return (
     <div className="space-y-5 pb-24">
       <div className="flex items-center justify-between">
@@ -137,7 +129,9 @@ export function MessagesTab() {
           </div>
           <div className="text-center">
             <p className="text-sm font-medium">{t('messages.loading')}</p>
-            <p className="text-xs text-muted-foreground mt-1">{t('messages.loadingDesc', { phase: cyclePhase })}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('messages.loadingDesc', { phase: cyclePhase })}
+            </p>
           </div>
           <div className="flex gap-1">
             {[0,1,2].map(i => (

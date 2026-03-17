@@ -167,7 +167,7 @@ export function Paywall() {
   const handleGetAccess = async () => {
   if (selected === 'free') {
     updateUserData({ hasPaid: false });
-    navigate('/signup');
+    navigate('/dashboard');
     return;
   }
   if (!selected || !currency) return;
@@ -210,15 +210,18 @@ export function Paywall() {
       stripe_customer_id: stripeCustomerId ?? undefined,
     });
     setShowPaymentForm(false);
-    navigate('/signup');
+    navigate('/dashboard');
   };
 
-  const features = [
-    t('paywall.features.chart'), t('paywall.features.transits'),
-    t('paywall.features.cycle'), t('paywall.features.hormonal'),
-    t('paywall.features.moon'),  t('paywall.features.wellness'),
-    t('paywall.features.unlimited'),
-  ];
+const features = [
+  t('paywall.features.chart'),
+  t('paywall.features.transits'),
+  t('paywall.features.cycle'),
+  t('paywall.features.hormonal'),
+  t('paywall.features.moon'),
+  t('paywall.features.wellness'),
+  t('paywall.features.unlimited'),
+]; 
 
 const stripeAppearance = {
   theme: 'stripe' as const,

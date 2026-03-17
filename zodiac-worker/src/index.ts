@@ -1,4 +1,4 @@
-// ─── Astronomy helpers (unchanged) ──────────────────────────────────────────
+// ─── Astronomy helpers ────────────────────────────────────────────────────────
 function julianDay(year: number, month: number, day: number, hour: number): number {
   if (month <= 2) { year -= 1; month += 12; }
   const A = Math.floor(year / 100);
@@ -101,6 +101,75 @@ function calcChart(year: number, month: number, day: number, hour: number, lat: 
   };
 }
 
+// ─── Transit helpers ──────────────────────────────────────────────────────────
+const ASPECT_ORBS: Record<string, number> = {
+  conjunction: 8, opposition: 8, trine: 6, square: 6, sextile: 4,
+};
+
+function getSignDegree(sign: string, degree: number): number {
+  return SIGNS.indexOf(sign) * 30 + degree;
+}
+
+function getAspect(lon1: number, lon2: number): string | null {
+  let diff = Math.abs(lon1 - lon2) % 360;
+  if (diff > 180) diff = 360 - diff;
+  const aspects = [
+    { name: 'conjunction', angle: 0 }, { name: 'sextile', angle: 60 },
+    { name: 'square', angle: 90 }, { name: 'trine', angle: 120 }, { name: 'opposition', angle: 180 },
+  ];
+  for (const asp of aspects) {
+    if (Math.abs(diff - asp.angle) <= ASPECT_ORBS[asp.name]) return asp.name;
+  }
+  return null;
+}
+
+function getCurrentPlanets(): Record<string, { sign: string; degree: number }> {
+  const now = new Date();
+  const jd = julianDay(now.getUTCFullYear(), now.getUTCMonth()+1, now.getUTCDate(),
+    now.getUTCHours() + now.getUTCMinutes()/60);
+  return {
+    sun:     { sign: toSign(sunLon(jd)),     degree: Math.floor(normalize(sunLon(jd)) % 30) },
+    moon:    { sign: toSign(moonLon(jd)),    degree: Math.floor(normalize(moonLon(jd)) % 30) },
+    mercury: { sign: toSign(mercuryLon(jd)), degree: Math.floor(normalize(mercuryLon(jd)) % 30) },
+    venus:   { sign: toSign(venusLon(jd)),   degree: Math.floor(normalize(venusLon(jd)) % 30) },
+    mars:    { sign: toSign(marsLon(jd)),    degree: Math.floor(normalize(marsLon(jd)) % 30) },
+    jupiter: { sign: toSign(jupiterLon(jd)), degree: Math.floor(normalize(jupiterLon(jd)) % 30) },
+    saturn:  { sign: toSign(saturnLon(jd)),  degree: Math.floor(normalize(saturnLon(jd)) % 30) },
+  };
+}
+
+function countActiveTransits(user: any): number {
+  if (!user.sun_sign) return 0;
+  const current = getCurrentPlanets();
+  const natal: Record<string, string> = {
+    sun: user.sun_sign, moon: user.moon_sign,
+    mercury: user.mercury_sign, venus: user.venus_sign, mars: user.mars_sign,
+  };
+  let count = 0;
+  for (const tp of ['sun','moon','mercury','venus','mars','jupiter','saturn']) {
+    if (!current[tp]) continue;
+    const tLon = getSignDegree(current[tp].sign, current[tp].degree);
+    for (const np of ['sun','moon','venus','mars','mercury']) {
+      if (!natal[np]) continue;
+      const nLon = getSignDegree(natal[np], 15);
+      if (getAspect(tLon, nLon)) count++;
+    }
+  }
+  return count;
+}
+
+function getCyclePhase(cycleDay: number): string {
+  if (cycleDay <= 5) return 'Menstrual';
+  if (cycleDay <= 13) return 'Follicular';
+  if (cycleDay <= 16) return 'Ovulation';
+  return 'Luteal';
+}
+
+function getPreviousCyclePhase(cycleDay: number): string {
+  // What was the phase yesterday?
+  return getCyclePhase(Math.max(1, cycleDay - 1));
+}
+
 // ─── Email templates ──────────────────────────────────────────────────────────
 function emailBase(content: string): string {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
@@ -113,53 +182,67 @@ function emailBase(content: string): string {
     p{color:rgba(255,255,255,0.7);font-size:0.95rem;line-height:1.6;margin:0 0 16px}
     .btn{display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#c084fc,#f472b6);color:#fff;text-decoration:none;border-radius:50px;font-weight:bold;font-size:0.95rem;margin:8px 0}
     .footer{text-align:center;margin-top:32px;color:rgba(255,255,255,0.3);font-size:0.8rem}
-    .divider{border:none;border-top:1px solid rgba(255,255,255,0.1);margin:24px 0}
-    .phase-chip{display:inline-block;padding:4px 12px;border-radius:50px;font-size:0.8rem;font-weight:600;margin-bottom:16px}
     .highlight{background:rgba(192,132,252,0.1);border-left:3px solid #c084fc;padding:12px 16px;border-radius:0 12px 12px 0;margin:16px 0}
+    .insight-card{background:rgba(192,132,252,0.08);border:1px solid rgba(192,132,252,0.2);border-radius:16px;padding:20px;margin:16px 0}
   </style></head><body><div class="wrap">
     <div class="logo"><span>🌙 ZodiacCycle</span></div>
     ${content}
     <div class="footer">
       <p>ZodiacCycle · <a href="https://zodiaccycle.app" style="color:#c084fc">zodiaccycle.app</a></p>
       <p>You're receiving this because you have notifications enabled.<br>
-      <a href="https://zodiaccycle.app" style="color:#c084fc">Manage notification preferences</a></p>
+      <a href="https://zodiaccycle.app" style="color:#c084fc">Manage preferences</a></p>
     </div>
   </div></body></html>`;
 }
 
-function confirmEmail(confirmUrl: string): string {
+function dailyInsightEmail(name: string, phase: string, cycleDay: number, sunSign: string, preview: string): string {
   return emailBase(`<div class="card">
-    <h1>✨ Confirm your email</h1>
-    <p>Welcome to ZodiacCycle! Click the button below to confirm your email address and activate your account.</p>
-    <div style="text-align:center;margin:24px 0">
-      <a href="${confirmUrl}" class="btn">Confirm Email Address</a>
+    <span style="display:inline-block;padding:4px 12px;border-radius:50px;font-size:0.8rem;font-weight:600;background:rgba(192,132,252,0.2);color:#c084fc;margin-bottom:16px">✨ Daily Cosmic Insight</span>
+    <h1>Your cosmic message for today</h1>
+    <p>Hi ${name || 'Starlighter'} 🌙</p>
+    <div class="highlight">
+      <p style="margin:0;font-size:0.9rem"><strong>☀️ ${sunSign}</strong> · ${phase} Phase · Day ${cycleDay}</p>
     </div>
-    <p style="font-size:0.85rem;color:rgba(255,255,255,0.4)">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>
+    <div class="insight-card">
+      <p style="margin:0;font-style:italic;color:rgba(255,255,255,0.85)">"${preview}"</p>
+    </div>
+    <p>Open ZodiacCycle for your full daily reading.</p>
+    <div style="text-align:center;margin:24px 0">
+      <a href="https://zodiaccycle.app" class="btn">Read Full Insight ✨</a>
+    </div>
   </div>`);
 }
 
-function resetEmail(resetUrl: string): string {
+function phaseChangeEmail(name: string, newPhase: string, sunSign: string, tip: string): string {
+  const phaseEmojis: Record<string, string> = {
+    Menstrual: '🔴', Follicular: '🌸', Ovulation: '⭐', Luteal: '🌙',
+  };
+  const emoji = phaseEmojis[newPhase] || '✨';
   return emailBase(`<div class="card">
-    <h1>🔐 Reset your password</h1>
-    <p>We received a request to reset your ZodiacCycle password. Click the button below to choose a new password.</p>
-    <div style="text-align:center;margin:24px 0">
-      <a href="${resetUrl}" class="btn">Reset Password</a>
+    <span style="display:inline-block;padding:4px 12px;border-radius:50px;font-size:0.8rem;font-weight:600;background:rgba(192,132,252,0.2);color:#c084fc;margin-bottom:16px">${emoji} Phase Change</span>
+    <h1>You've entered your ${newPhase} Phase</h1>
+    <p>Hi ${name || 'Starlighter'} 🌙</p>
+    <p>Your cycle has shifted into a new phase today. Here's what to expect:</p>
+    <div class="highlight">
+      <p style="margin:0;font-size:0.9rem">💡 ${tip}</p>
     </div>
-    <p style="font-size:0.85rem;color:rgba(255,255,255,0.4)">This link expires in 1 hour. If you didn't request a password reset, please ignore this email.</p>
+    <p>Open ZodiacCycle to see how this phase interacts with your ☀️ ${sunSign} energy.</p>
+    <div style="text-align:center;margin:24px 0">
+      <a href="https://zodiaccycle.app" class="btn">View Your Cycle ✨</a>
+    </div>
   </div>`);
 }
 
 function periodReminderEmail(name: string, daysUntil: number, phase: string, sunSign: string): string {
   return emailBase(`<div class="card">
-    <span class="phase-chip" style="background:rgba(244,63,94,0.2);color:#f43f5e">🔴 Period Reminder</span>
+    <span style="display:inline-block;padding:4px 12px;border-radius:50px;font-size:0.8rem;font-weight:600;background:rgba(244,63,94,0.2);color:#f43f5e;margin-bottom:16px">🔴 Period Reminder</span>
     <h1>Your period is coming in ${daysUntil} day${daysUntil !== 1 ? 's' : ''}</h1>
-    <p>Hi ${name || 'there'} 🌙</p>
+    <p>Hi ${name || 'Starlighter'} 🌙</p>
     <p>Based on your cycle history, your next period is predicted to arrive in <strong style="color:#f43f5e">${daysUntil} day${daysUntil !== 1 ? 's' : ''}</strong>.</p>
     <div class="highlight">
-      <p style="margin:0;font-size:0.9rem"><strong>Current phase:</strong> ${phase}<br>
-      <strong>Your sun sign:</strong> ☀️ ${sunSign}</p>
+      <p style="margin:0;font-size:0.9rem"><strong>Current phase:</strong> ${phase} · ☀️ ${sunSign}</p>
     </div>
-    <p>Now is a good time to prepare — stock up on comfort supplies, clear your schedule if possible, and be gentle with yourself.</p>
+    <p>Now is a good time to prepare — stock up on comfort supplies and be gentle with yourself.</p>
     <div style="text-align:center;margin:24px 0">
       <a href="https://zodiaccycle.app" class="btn">Open ZodiacCycle</a>
     </div>
@@ -168,32 +251,15 @@ function periodReminderEmail(name: string, daysUntil: number, phase: string, sun
 
 function ovulationEmail(name: string, sunSign: string, moonSign: string): string {
   return emailBase(`<div class="card">
-    <span class="phase-chip" style="background:rgba(16,185,129,0.2);color:#10b981">🌿 Fertile Window</span>
+    <span style="display:inline-block;padding:4px 12px;border-radius:50px;font-size:0.8rem;font-weight:600;background:rgba(16,185,129,0.2);color:#10b981;margin-bottom:16px">🌿 Fertile Window</span>
     <h1>You're entering your fertile window</h1>
-    <p>Hi ${name || 'there'} 🌙</p>
-    <p>Your fertile window is beginning. This is your peak energy phase — you may feel more social, confident, and magnetic.</p>
+    <p>Hi ${name || 'Starlighter'} 🌙</p>
+    <p>Your fertile window is beginning. This is your peak energy phase.</p>
     <div class="highlight">
-      <p style="margin:0;font-size:0.9rem">☀️ ${sunSign} Sun · 🌙 ${moonSign} Moon<br>
-      <strong>Cosmic tip:</strong> Ovulation energy amplifies your natural ${sunSign} traits. Lean into your strengths today.</p>
+      <p style="margin:0;font-size:0.9rem">☀️ ${sunSign} Sun · 🌙 ${moonSign} Moon</p>
     </div>
     <div style="text-align:center;margin:24px 0">
       <a href="https://zodiaccycle.app" class="btn">View Your Insights</a>
-    </div>
-  </div>`);
-}
-
-function weeklyDigestEmail(name: string, phase: string, cycleDay: number, sunSign: string, insight: string): string {
-  return emailBase(`<div class="card">
-    <span class="phase-chip" style="background:rgba(192,132,252,0.2);color:#c084fc">✨ Weekly Cosmic Digest</span>
-    <h1>Your week ahead, ${name || 'Starlighter'}</h1>
-    <div class="highlight">
-      <p style="margin:0;font-size:0.9rem"><strong>Cycle day ${cycleDay}</strong> · ${phase} Phase · ☀️ ${sunSign}</p>
-    </div>
-    <p>${insight}</p>
-    <hr class="divider">
-    <p>Open the app for your full daily transit readings and personalised cycle predictions.</p>
-    <div style="text-align:center;margin:24px 0">
-      <a href="https://zodiaccycle.app" class="btn">Open ZodiacCycle</a>
     </div>
   </div>`);
 }
@@ -215,109 +281,169 @@ async function sendEmail(env: any, to: string, subject: string, html: string): P
       }),
     });
     return res.ok;
-  } catch {
-    return false;
-  }
+  } catch { return false; }
 }
 
-// ─── Web Push helper ──────────────────────────────────────────────────────────
-async function sendPushNotification(
-  env: any,
-  subscription: { endpoint: string; p256dh: string; auth: string },
-  title: string,
-  body: string,
-  url: string = '/'
-): Promise<boolean> {
-  try {
-    const payload = JSON.stringify({ title, body, url, icon: '/icons/icon-192x192.png' });
-    // Use Supabase to call web-push since CF Workers don't have native web-push
-    const res = await fetch(`${env.SUPABASE_URL}/functions/v1/send-push`, {
+// ─── Send push notification ───────────────────────────────────────────────────
+async function sendPush(env: any, subs: any[], title: string, body: string, url: string = '/'): Promise<void> {
+  const payload = JSON.stringify({ title, body, url, icon: '/icons/icon-192x192.png' });
+  await Promise.allSettled(subs.map(sub =>
+    fetch(`${env.SUPABASE_URL}/functions/v1/send-push`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ subscription, payload, vapidPrivateKey: env.VAPID_PRIVATE_KEY }),
+      body: JSON.stringify({ subscription: sub, payload, vapidPrivateKey: env.VAPID_PRIVATE_KEY }),
+    }).catch(() => {})
+  ));
+}
+
+// ─── Get push subscriptions for a user ───────────────────────────────────────
+async function getUserSubs(env: any, userId: string): Promise<any[]> {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${userId}&select=endpoint,p256dh,auth`,
+      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+    );
+    return res.ok ? await res.json() : [];
+  } catch { return []; }
+}
+
+// ─── Generate short AI insight preview ───────────────────────────────────────
+async function generateInsightPreview(env: any, user: any, cycleDay: number, phase: string): Promise<string> {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 100,
+        messages: [{
+          role: 'user',
+          content: `Write a single warm, poetic sentence (max 20 words) as a daily cosmic insight for someone with Sun in ${user.sun_sign || 'unknown'}, Moon in ${user.moon_sign || 'unknown'}, currently in their ${phase} phase on cycle day ${cycleDay}. No hashtags, no emojis, just a beautiful sentence.`,
+        }],
+        system: 'You are ZodiacCycle, a warm cosmic wellness companion. Write brief, personal, poetic insights.',
+      }),
     });
-    return res.ok;
+    const data = await res.json() as any;
+    return data.content?.[0]?.text?.trim() || `Your ${phase} energy is alive today — open ZodiacCycle for your full reading.`;
   } catch {
-    return false;
+    return `Your ${phase} energy is alive today — open ZodiacCycle for your full reading.`;
+  }
+}
+
+// ─── Phase tips ───────────────────────────────────────────────────────────────
+const PHASE_TIPS: Record<string, string> = {
+  Menstrual: 'Rest is productive. Honour your body with warmth, gentle movement, and iron-rich foods.',
+  Follicular: 'Estrogen is rising! Great time to start new projects, socialise, and try new workouts.',
+  Ovulation: 'Peak fertility and confidence. Ideal for big presentations and important conversations.',
+  Luteal: 'Progesterone peaks then drops. Focus on completing tasks and winding down.',
+};
+
+// ─── Main cron logic ─────────────────────────────────────────────────────────
+async function runDailyCron(env: any): Promise<void> {
+  console.log('Cron starting:', new Date().toISOString());
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/profiles?select=id,email,name,sun_sign,moon_sign,last_period_start,notif_period_reminder,notif_ovulation,notif_phase_change,notif_daily_insights,notif_email,notif_push,has_paid`,
+      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!res.ok) { console.error('Failed to fetch users'); return; }
+    const users = await res.json() as any[];
+    console.log(`Processing ${users.length} users`);
+
+    for (const user of users) {
+      if (!user.email) continue;
+      const isPremium = user.has_paid === true;
+      const hasPeriodData = !!user.last_period_start;
+
+      let cycleDay = 14;
+      let daysUntilNext = 14;
+      let currentPhase = 'Luteal';
+      let previousPhase = 'Luteal';
+
+      if (hasPeriodData) {
+        const lastPeriod = new Date(user.last_period_start);
+        const today = new Date();
+        const daysSince = Math.floor((today.getTime() - lastPeriod.getTime()) / 86400000);
+        const cycleLength = 28;
+        cycleDay = Math.max(1, (daysSince % cycleLength) + 1);
+        daysUntilNext = cycleLength - (daysSince % cycleLength);
+        currentPhase = getCyclePhase(cycleDay);
+        previousPhase = getPreviousCyclePhase(cycleDay);
+      }
+
+      let subs: any[] = [];
+      if (user.notif_push) {
+        subs = await getUserSubs(env, user.id);
+      }
+
+      // Period reminder
+      if (user.notif_period_reminder && hasPeriodData && daysUntilNext === 3) {
+        if (user.notif_email) {
+          await sendEmail(env, user.email, '🔴 Your period is coming in 3 days',
+            periodReminderEmail(user.name, 3, currentPhase, user.sun_sign || 'Unknown'));
+        }
+        if (user.notif_push && subs.length > 0) {
+          await sendPush(env, subs, '🔴 Period reminder', 'Your period is expected in 3 days', '/');
+        }
+      }
+
+      // Ovulation alert
+      if (user.notif_ovulation && hasPeriodData && (cycleDay === 9 || cycleDay === 10)) {
+        if (user.notif_email) {
+          await sendEmail(env, user.email, '🌿 Your fertile window is starting',
+            ovulationEmail(user.name, user.sun_sign || 'Unknown', user.moon_sign || 'Unknown'));
+        }
+        if (user.notif_push && subs.length > 0) {
+          await sendPush(env, subs, '🌿 Fertile window', 'Your fertile window is starting today', '/');
+        }
+      }
+
+      // Phase change (premium only)
+      if (isPremium && user.notif_phase_change && hasPeriodData && currentPhase !== previousPhase) {
+        const tip = PHASE_TIPS[currentPhase] || '';
+        if (user.notif_email) {
+          await sendEmail(env, user.email, `✨ You've entered your ${currentPhase} Phase`,
+            phaseChangeEmail(user.name, currentPhase, user.sun_sign || 'Unknown', tip));
+        }
+        if (user.notif_push && subs.length > 0) {
+          const phaseEmojis: Record<string, string> = { Menstrual: '🔴', Follicular: '🌸', Ovulation: '⭐', Luteal: '🌙' };
+          await sendPush(env, subs, `${phaseEmojis[currentPhase] || '✨'} New phase: ${currentPhase}`, tip.slice(0, 80), '/');
+        }
+      }
+
+      // Daily insight (premium only)
+      if (isPremium && user.notif_daily_insights) {
+        const preview = await generateInsightPreview(env, user, cycleDay, currentPhase);
+        if (user.notif_email) {
+          await sendEmail(env, user.email,
+            `✨ Your cosmic insight for today, ${user.name || 'Starlighter'}`,
+            dailyInsightEmail(user.name, currentPhase, cycleDay, user.sun_sign || 'Unknown', preview));
+        }
+        if (user.notif_push && subs.length > 0) {
+          await sendPush(env, subs, '🔮 Your daily cosmic insight', preview.slice(0, 100), '/');
+        }
+      }
+    }
+    console.log('Cron completed successfully');
+  } catch (err) {
+    console.error('Cron error:', err);
   }
 }
 
 // ─── Main worker ──────────────────────────────────────────────────────────────
 export default {
-  // ── Cron scheduler ──────────────────────────────────────────────────────────
-  async scheduled(event: any, env: any, ctx: any): Promise<void> {
-    // Runs daily at 8am UTC — sends period reminders and ovulation alerts
-    try {
-      const supabaseUrl = env.SUPABASE_URL;
-      const supabaseKey = env.SUPABASE_SERVICE_KEY;
-
-      // Fetch all users with their cycle data and notification preferences
-      const res = await fetch(
-        `${supabaseUrl}/rest/v1/profiles?select=id,email,name,sun_sign,moon_sign,last_period_start,notif_period_reminder,notif_ovulation,notif_email,notif_push&has_paid=eq.true`,
-        { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
-      );
-      const users = await res.json() as any[];
-
-      for (const user of users) {
-        if (!user.last_period_start || !user.email) continue;
-
-        const lastPeriod = new Date(user.last_period_start);
-        const today = new Date();
-        const daysSince = Math.floor((today.getTime() - lastPeriod.getTime()) / 86400000);
-        const cycleLength = 28;
-        const cycleDay = (daysSince % cycleLength) + 1;
-        const daysUntilNext = cycleLength - (daysSince % cycleLength);
-
-        // Period reminder — 3 days before
-        if (user.notif_period_reminder && daysUntilNext === 3) {
-          const phase = cycleDay <= 5 ? 'Menstrual' : cycleDay <= 13 ? 'Follicular' : cycleDay <= 16 ? 'Ovulation' : 'Luteal';
-
-          if (user.notif_email && user.email) {
-            await sendEmail(env, user.email, '🔴 Your period is coming in 3 days',
-              periodReminderEmail(user.name, 3, phase, user.sun_sign || 'Unknown'));
-          }
-
-          if (user.notif_push) {
-            // Fetch push subscriptions for this user
-            const subRes = await fetch(
-              `${supabaseUrl}/rest/v1/push_subscriptions?user_id=eq.${user.id}&select=endpoint,p256dh,auth`,
-              { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
-            );
-            const subs = await subRes.json() as any[];
-            for (const sub of subs) {
-              await sendPushNotification(env, sub, '🔴 Period reminder', 'Your period is expected in 3 days', '/');
-            }
-          }
-        }
-
-        // Ovulation alert — fertile window start (day ~9-10)
-        if (user.notif_ovulation && (cycleDay === 9 || cycleDay === 10)) {
-          if (user.notif_email && user.email) {
-            await sendEmail(env, user.email, '🌿 Your fertile window is starting',
-              ovulationEmail(user.name, user.sun_sign || 'Unknown', user.moon_sign || 'Unknown'));
-          }
-
-          if (user.notif_push) {
-            const subRes = await fetch(
-              `${supabaseUrl}/rest/v1/push_subscriptions?user_id=eq.${user.id}&select=endpoint,p256dh,auth`,
-              { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` } }
-            );
-            const subs = await subRes.json() as any[];
-            for (const sub of subs) {
-              await sendPushNotification(env, sub, '🌿 Fertile window', 'Your fertile window is starting today', '/');
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Cron error:', err);
-    }
+  async scheduled(_event: any, env: any, _ctx: any): Promise<void> {
+    await runDailyCron(env);
   },
 
-  async fetch(request: Request, env: any): Promise<Response> {
+  async fetch(request: Request, env: any): Promise<Response> { 
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -340,10 +466,10 @@ export default {
           });
         }
         const dt = new Date(datetime);
+        const [lat, lng] = coordinates.split(',').map(Number);
         const chart = calcChart(
           dt.getUTCFullYear(), dt.getUTCMonth()+1, dt.getUTCDate(),
-          dt.getUTCHours() + dt.getUTCMinutes()/60,
-          ...coordinates.split(',').map(Number) as [number, number]
+          dt.getUTCHours() + dt.getUTCMinutes()/60, lat, lng
         );
         return new Response(JSON.stringify({ status: 'ok', data: chart }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -385,19 +511,20 @@ export default {
       }
     }
 
-    // ── Email: Send confirmation ───────────────────────────────────────────
+    // ── Email: Confirmation ────────────────────────────────────────────────
     if (path === '/email/confirm' && request.method === 'POST') {
       try {
         const { email, confirmUrl } = await request.json() as any;
-        if (!email || !confirmUrl) {
-          return new Response(JSON.stringify({ error: 'Missing email or confirmUrl' }), {
-            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        const ok = await sendEmail(env, email, '✨ Confirm your ZodiacCycle account', confirmEmail(confirmUrl));
-        return new Response(JSON.stringify({ ok }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        const html = emailBase(`<div class="card">
+          <h1>✨ Confirm your email</h1>
+          <p>Welcome to ZodiacCycle! Click below to confirm your email and activate your account.</p>
+          <div style="text-align:center;margin:24px 0">
+            <a href="${confirmUrl}" class="btn">Confirm Email Address</a>
+          </div>
+          <p style="font-size:0.85rem;color:rgba(255,255,255,0.4)">Link expires in 24 hours.</p>
+        </div>`);
+        const ok = await sendEmail(env, email, '✨ Confirm your ZodiacCycle account', html);
+        return new Response(JSON.stringify({ ok }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } catch (err) {
         return new Response(JSON.stringify({ error: String(err) }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -405,19 +532,20 @@ export default {
       }
     }
 
-    // ── Email: Send password reset ─────────────────────────────────────────
+    // ── Email: Password reset ──────────────────────────────────────────────
     if (path === '/email/reset' && request.method === 'POST') {
       try {
         const { email, resetUrl } = await request.json() as any;
-        if (!email || !resetUrl) {
-          return new Response(JSON.stringify({ error: 'Missing params' }), {
-            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        const ok = await sendEmail(env, email, '🔐 Reset your ZodiacCycle password', resetEmail(resetUrl));
-        return new Response(JSON.stringify({ ok }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        const html = emailBase(`<div class="card">
+          <h1>🔐 Reset your password</h1>
+          <p>Click below to choose a new ZodiacCycle password.</p>
+          <div style="text-align:center;margin:24px 0">
+            <a href="${resetUrl}" class="btn">Reset Password</a>
+          </div>
+          <p style="font-size:0.85rem;color:rgba(255,255,255,0.4)">Link expires in 1 hour.</p>
+        </div>`);
+        const ok = await sendEmail(env, email, '🔐 Reset your ZodiacCycle password', html);
+        return new Response(JSON.stringify({ ok }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } catch (err) {
         return new Response(JSON.stringify({ error: String(err) }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -425,31 +553,10 @@ export default {
       }
     }
 
-    // ── Email: Weekly digest ───────────────────────────────────────────────
-    if (path === '/email/digest' && request.method === 'POST') {
-      try {
-        const { email, name, phase, cycleDay, sunSign, insight } = await request.json() as any;
-        const ok = await sendEmail(env, email, '✨ Your weekly cosmic digest',
-          weeklyDigestEmail(name, phase, cycleDay, sunSign, insight));
-        return new Response(JSON.stringify({ ok }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: String(err) }), {
-          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
-
-    // ── Push: Save subscription ────────────────────────────────────────────
+    // ── Push: Subscribe ────────────────────────────────────────────────────
     if (path === '/push/subscribe' && request.method === 'POST') {
       try {
         const { userId, subscription } = await request.json() as any;
-        if (!userId || !subscription) {
-          return new Response(JSON.stringify({ error: 'Missing params' }), {
-            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
         const res = await fetch(`${env.SUPABASE_URL}/rest/v1/push_subscriptions`, {
           method: 'POST',
           headers: {
@@ -465,9 +572,7 @@ export default {
             auth: subscription.keys.auth,
           }),
         });
-        return new Response(JSON.stringify({ ok: res.ok }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return new Response(JSON.stringify({ ok: res.ok }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } catch (err) {
         return new Response(JSON.stringify({ error: String(err) }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -483,15 +588,10 @@ export default {
           `${env.SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${userId}&endpoint=eq.${encodeURIComponent(endpoint)}`,
           {
             method: 'DELETE',
-            headers: {
-              'apikey': env.SUPABASE_SERVICE_KEY,
-              'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-            },
+            headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` },
           }
         );
-        return new Response(JSON.stringify({ ok: true }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } catch (err) {
         return new Response(JSON.stringify({ error: String(err) }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -503,29 +603,24 @@ export default {
     if (path === '/notifications/preferences' && request.method === 'POST') {
       try {
         const { userId, preferences } = await request.json() as any;
-        const res = await fetch(
-          `${env.SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`,
-          {
-            method: 'PATCH',
-            headers: {
-              'apikey': env.SUPABASE_SERVICE_KEY,
-              'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              notif_push: preferences.push,
-              notif_email: preferences.email,
-              notif_period_reminder: preferences.periodReminder,
-              notif_ovulation: preferences.ovulationAlert,
-              notif_phase_change: preferences.phaseChange,
-              notif_daily_insights: preferences.dailyInsights,
-              notif_frequency: preferences.frequency,
-            }),
-          }
-        );
-        return new Response(JSON.stringify({ ok: res.ok }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': env.SUPABASE_SERVICE_KEY,
+            'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            notif_push: preferences.push,
+            notif_email: preferences.email,
+            notif_period_reminder: preferences.periodReminder,
+            notif_ovulation: preferences.ovulationAlert,
+            notif_phase_change: preferences.phaseChange,
+            notif_daily_insights: preferences.dailyInsights,
+            notif_frequency: preferences.frequency,
+          }),
         });
+        return new Response(JSON.stringify({ ok: res.ok }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       } catch (err) {
         return new Response(JSON.stringify({ error: String(err) }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -533,21 +628,14 @@ export default {
       }
     }
 
-    // ── Stripe: Create Payment Intent ──────────────────────────────────────
+    // ── Stripe: Create payment intent ──────────────────────────────────────
     if (path === '/stripe/create-payment-intent' && request.method === 'POST') {
       try {
-        const body = await request.json() as any;
-        const { priceId, email } = body;
-        if (!env.STRIPE_SECRET_KEY) {
-          return new Response(JSON.stringify({ error: 'Stripe not configured' }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        if (!priceId) {
-          return new Response(JSON.stringify({ error: 'Missing priceId' }), {
-            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
+        const { priceId, email } = await request.json() as any;
+        if (!priceId) return new Response(JSON.stringify({ error: 'Missing priceId' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+
         let customerId: string | undefined;
         if (email) {
           const searchRes = await fetch(
@@ -567,77 +655,33 @@ export default {
             if (!customer.error) customerId = customer.id;
           }
         }
+
         const priceRes = await fetch(`https://api.stripe.com/v1/prices/${priceId}`, {
           headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}` },
         });
         const price = await priceRes.json() as any;
-        if (price.error) {
-          return new Response(JSON.stringify({ error: `Invalid price: ${price.error.message}` }), {
-            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        if (price.type === 'recurring') {
-          const subParams = new URLSearchParams({
-            'items[0][price]': priceId,
-            'payment_behavior': 'default_incomplete',
-            'payment_settings[save_default_payment_method]': 'on_subscription',
-            'expand[0]': 'latest_invoice.payment_intent',
-          });
-          if (customerId) subParams.set('customer', customerId);
-          const subRes = await fetch('https://api.stripe.com/v1/subscriptions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: subParams.toString(),
-          });
-          const subscription = await subRes.json() as any;
-          if (!subscription.error) {
-            const clientSecret = subscription.latest_invoice?.payment_intent?.client_secret;
-            if (clientSecret) {
-              return new Response(JSON.stringify({ clientSecret, subscriptionId: subscription.id, customerId }), {
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              });
-            }
-          }
-        }
+        if (price.error) return new Response(JSON.stringify({ error: `Invalid price: ${price.error.message}` }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+
         const piParams = new URLSearchParams({
           'amount': String(price.unit_amount || 100),
-          'currency': price.currency || 'usd',
+          'currency': price.currency || 'eur',
           'automatic_payment_methods[enabled]': 'true',
         });
         if (customerId) piParams.set('customer', customerId);
+
         const piRes = await fetch('https://api.stripe.com/v1/payment_intents', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
           body: piParams.toString(),
         });
         const pi = await piRes.json() as any;
-        if (pi.error) {
-          return new Response(JSON.stringify({ error: `Payment failed: ${pi.error.message}` }), {
-            status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        return new Response(JSON.stringify({ clientSecret: pi.client_secret, customerId }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        if (pi.error) return new Response(JSON.stringify({ error: pi.error.message }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: String(err) }), {
-          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
 
-    // ── Stripe: Update customer ────────────────────────────────────────────
-    if (path === '/stripe/update-customer' && request.method === 'POST') {
-      try {
-        const { customerId, email } = await request.json() as any;
-        if (customerId && email) {
-          await fetch(`https://api.stripe.com/v1/customers/${customerId}`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ email }).toString(),
-          });
-        }
-        return new Response(JSON.stringify({ ok: true }), {
+        return new Response(JSON.stringify({ clientSecret: pi.client_secret, customerId }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       } catch (err) {
@@ -670,8 +714,22 @@ export default {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+   // ── Test cron manually ─────────────────────────────────────────────────
+    if (path === '/cron/test' && request.method === 'POST') {
+      try {
+        await runDailyCron(env);
+        return new Response(JSON.stringify({ ok: true, message: 'Cron ran successfully' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Not found' }), {
       status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   },
-};
+}; 
