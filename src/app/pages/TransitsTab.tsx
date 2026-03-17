@@ -113,18 +113,18 @@ async function getTransitInterpretation(
     const text = data.content?.[0]?.text?.trim() || '';
     if (!text || text.length < 10) throw new Error('Empty or too short response');
     return text;
-  } catch (err) {
-    console.error('Transit AI error:', err);
+ } catch (err) {
+  console.error('Transit AI full error:', JSON.stringify(err), err);
     // Meaningful fallback that at least describes the transit
     const aspectMeanings: Record<string, string> = {
-      conjunction: 'merges powerfully with',
-      trine: 'flows harmoniously with',
-      square: 'creates dynamic tension with',
-      opposition: 'brings awareness to',
-      sextile: 'opens opportunities through',
-    };
-    const meaning = aspectMeanings[aspect] || 'aspects';
-    return `${tPlanet} in ${transitSign} ${meaning} your natal ${nPlanet} in ${natalSign} this week. Open the app to refresh for your personalised interpretation.`;
+  conjunction: 'amplifies',
+  trine: 'harmonises with',
+  square: 'challenges',
+  opposition: 'illuminates tension with',
+  sextile: 'gently supports',
+};
+const meaning = aspectMeanings[aspect] || 'aspects';
+return `${tPlanet} in ${transitSign} ${meaning} your natal ${nPlanet} energy — tap refresh to load your full personalised reading.`;
   }
 } 
 

@@ -1,0 +1,5 @@
+/* Hide Stripe test mode toolbar */
+iframe[src*="stripe"][style*="position: fixed"],
+iframe[src*="stripe"][style*="position:fixed"] {
+  display: none !important;
+}

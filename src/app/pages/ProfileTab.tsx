@@ -378,6 +378,115 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
   );
 }
 
+// ─── Install App Tutorial ─────────────────────────────────────────────────────
+function InstallAppGuide({ onClose }: { onClose: () => void }) {
+  const [platform, setPlatform] = useState<'ios' | 'android'>(() => {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent) ? 'ios' : 'android';
+  });
+
+  const isInstalled = window.matchMedia('(display-mode: standalone)').matches;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="glass-heavy w-full max-w-lg rounded-t-3xl p-6 border-t border-white/40 space-y-5 max-h-[85vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        <div className="w-12 h-1.5 rounded-full bg-border/50 mx-auto"/>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold">Add to Home Screen</h3>
+          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-xl">
+            <X className="w-5 h-5 text-muted-foreground"/>
+          </button>
+        </div>
+
+        {isInstalled ? (
+          <div className="glass rounded-2xl p-5 border border-primary/30 text-center space-y-2">
+            <p className="text-3xl">✅</p>
+            <p className="font-bold text-primary">ZodiacCycle is installed!</p>
+            <p className="text-sm text-muted-foreground">You're already using the app from your home screen.</p>
+          </div>
+        ) : (
+          <>
+            {/* Platform toggle */}
+            <div className="flex gap-2 p-1 glass rounded-2xl border border-white/30">
+              <button
+                onClick={() => setPlatform('ios')}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${platform === 'ios' ? 'bg-primary text-white shadow-md' : 'text-muted-foreground hover:bg-white/20'}`}
+              >
+                🍎 iPhone / iPad
+              </button>
+              <button
+                onClick={() => setPlatform('android')}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${platform === 'android' ? 'bg-primary text-white shadow-md' : 'text-muted-foreground hover:bg-white/20'}`}
+              >
+                🤖 Android
+              </button>
+            </div>
+
+            {platform === 'ios' && (
+              <div className="space-y-3">
+                <div className="glass rounded-2xl p-4 border border-primary/20">
+                  <p className="text-xs font-bold text-primary uppercase tracking-wide mb-3">Safari only — Chrome on iOS cannot install apps</p>
+                  {[
+                    { step: '1', icon: '🌐', text: 'Open zodiaccycle.app in Safari (not Chrome)' },
+                    { step: '2', icon: '⎋', text: 'Tap the Share button at the bottom of Safari — it looks like a box with an arrow pointing up' },
+                    { step: '3', icon: '📲', text: 'Scroll down in the share sheet and tap "Add to Home Screen"' },
+                    { step: '4', icon: '✅', text: 'Tap "Add" in the top right corner — the app icon will appear on your home screen' },
+                  ].map(s => (
+                    <div key={s.step} className="flex items-start gap-3 py-2.5 border-b border-white/10 last:border-0">
+                      <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-xs font-bold text-primary">{s.step}</span>
+                      </div>
+                      <div className="flex items-start gap-2 flex-1">
+                        <span className="text-lg leading-none mt-0.5">{s.icon}</span>
+                        <p className="text-sm text-muted-foreground leading-relaxed">{s.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="glass rounded-2xl p-3 border border-amber-300/30 bg-amber-50/5">
+                  <p className="text-xs text-amber-400">💡 Once installed, ZodiacCycle opens full screen like a native app — no browser bar!</p>
+                </div>
+              </div>
+            )}
+
+            {platform === 'android' && (
+              <div className="space-y-3">
+                <div className="glass rounded-2xl p-4 border border-primary/20">
+                  <p className="text-xs font-bold text-primary uppercase tracking-wide mb-3">Works best in Chrome</p>
+                  {[
+                    { step: '1', icon: '🌐', text: 'Open zodiaccycle.app in Chrome on your Android device' },
+                    { step: '2', icon: '⋮', text: 'Tap the three-dot menu in the top right corner of Chrome' },
+                    { step: '3', icon: '📲', text: 'Tap "Add to Home screen" or "Install app" from the menu' },
+                    { step: '4', icon: '✅', text: 'Tap "Add" or "Install" to confirm — the app icon will appear on your home screen' },
+                  ].map(s => (
+                    <div key={s.step} className="flex items-start gap-3 py-2.5 border-b border-white/10 last:border-0">
+                      <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-xs font-bold text-primary">{s.step}</span>
+                      </div>
+                      <div className="flex items-start gap-2 flex-1">
+                        <span className="text-lg leading-none mt-0.5">{s.icon}</span>
+                        <p className="text-sm text-muted-foreground leading-relaxed">{s.text}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="glass rounded-2xl p-3 border border-primary/20 bg-primary/5">
+                  <p className="text-xs text-primary">💡 Chrome may show an automatic "Install ZodiacCycle" banner at the bottom — tap it to install instantly!</p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        <button onClick={onClose}
+          className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold">
+          Got it ✨
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN PROFILE TAB ─────────────────────────────────────────────────────────
 export function ProfileTab() {
   const { userData, updateUserData, clearUserData } = useUserData();
@@ -390,8 +499,9 @@ export function ProfileTab() {
 
   const [avatar, setAvatar] = useState<string>(() =>
     localStorage.getItem('zodiac_avatar') || ''
+  
   );
-
+const [showInstallGuide, setShowInstallGuide] = useState(false);
   const saveAvatar = (a: string) => {
     setAvatar(a);
     localStorage.setItem('zodiac_avatar', a);
@@ -527,6 +637,12 @@ export function ProfileTab() {
             action: () => setView('notifications'),
           },
           {
+  icon: <Smartphone className="w-4 h-4 text-primary"/>,
+  label: 'Add to Home Screen',
+  sub: 'Install ZodiacCycle as an app',
+  action: () => setShowInstallGuide(true),
+},
+          {
   icon: <Shield className="w-4 h-4 text-primary"/>,
   label: t('profile.privacy'),
   sub: 'How we use your data',
@@ -567,7 +683,7 @@ export function ProfileTab() {
                 <ChevronRight className="w-4 h-4 text-muted-foreground"/>
               </button>
             )}
-            {i < 3 && <div className="mx-5 border-b border-white/10"/>}
+            {i < 4 && <div className="mx-5 border-b border-white/10"/>}
           </div>
         ))}
       </div>
@@ -579,7 +695,9 @@ export function ProfileTab() {
       </button>
 
       <p className="text-center text-xs text-muted-foreground pb-2">{t('profile.version')}</p>
-
+      {showInstallGuide && (
+  <InstallAppGuide onClose={() => setShowInstallGuide(false)}/>
+)}
       {/* Modals */}
       {showAvatarPicker && (
         <AvatarPicker current={avatar} onSelect={saveAvatar} onClose={() => setShowAvatarPicker(false)}/>

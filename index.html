@@ -29,4 +29,8 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
+  <style>
+  /* Hide Stripe dev toolbar in test mode */
+  body > iframe[src*="stripe"] { display: none !important; }
+</style>
 </html>

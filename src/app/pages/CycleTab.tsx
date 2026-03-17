@@ -263,7 +263,7 @@ function MonthGrid({ month, periods, logs, cycleInfo, editMode, selectedDate, on
           const isOvulation = status === 'ovulation';
           const isFuture = day > today;
           return (
-            <div key={dateStr} className="flex flex-col items-center py-1">
+            <div key={dateStr} className="flex flex-col items-center py-1" style={{ minHeight: '48px', minWidth: '44px' }}>
               {isToday_ && (
                 <span className="text-[7px] font-bold text-gray-500 uppercase tracking-widest leading-none mb-0.5">TODAY</span>
               )}
@@ -271,6 +271,7 @@ function MonthGrid({ month, periods, logs, cycleInfo, editMode, selectedDate, on
                 onClick={() => onDayTap(day)}
                 className={`
                   w-9 h-9 rounded-full flex items-center justify-center transition-all relative select-none
+    touch-manipulation
                   ${isPeriod ? 'bg-rose-400 shadow-sm shadow-rose-200' : ''}
                   ${isPredicted && !isPeriod ? 'border-2 border-dashed border-rose-300 bg-rose-50/50' : ''}
                   ${isFertile && !isPeriod ? 'border-2 border-teal-300 bg-teal-50/50' : ''}
@@ -279,8 +280,10 @@ function MonthGrid({ month, periods, logs, cycleInfo, editMode, selectedDate, on
                   ${isSelected && !isPeriod ? 'ring-2 ring-rose-400 ring-offset-1' : ''}
                   ${isToday_ && !isPeriod ? 'border-2 border-gray-800' : ''}
                 `}
-                style={{ WebkitTapHighlightColor: 'transparent' }}
-              >
+               style={{
+                WebkitTapHighlightColor: 'transparent',touchAction: 'manipulation', // prevents 300ms delay on iOS
+                }}
+                 >
                 {isPeriod ? (
                   <Check className="w-4 h-4 text-white" strokeWidth={3} />
                 ) : (
@@ -479,7 +482,14 @@ export function CycleTab() {
       todayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 400);
   }, []);
-
+useEffect(() => {
+  if (showCalendarModal) {
+    // Small delay to let the modal render first
+    setTimeout(() => {
+      todayRef.current?.scrollIntoView({ behavior: 'instant', block: 'center' });
+    }, 100);
+  }
+}, [showCalendarModal]);
   const handleDayTap = useCallback((day: Date) => {
     if (editMode) {
       const dateStr = format(day, 'yyyy-MM-dd');
