@@ -57,8 +57,8 @@ export function MessagesTab() {
   };
 
   useEffect(() => {
-    if (isPremium) loadPredictions();
-  }, [isPremium]);
+  loadPredictions();
+}, []);
 
   const unreadCount = messages.filter(m => m.unread).length;
 

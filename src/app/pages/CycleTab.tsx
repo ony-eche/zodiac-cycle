@@ -263,14 +263,15 @@ function MonthGrid({ month, periods, logs, cycleInfo, editMode, selectedDate, on
           const isOvulation = status === 'ovulation';
           const isFuture = day > today;
           return (
-            <div key={dateStr} className="flex flex-col items-center py-1" style={{ minHeight: '48px', minWidth: '44px' }}>
+            <div key={dateStr} className="flex flex-col items-center py-1" 
+  style={{ minHeight: '52px', minWidth: '44px' }}>
               {isToday_ && (
                 <span className="text-[7px] font-bold text-gray-500 uppercase tracking-widest leading-none mb-0.5">TODAY</span>
               )}
               <button
                 onClick={() => onDayTap(day)}
                 className={`
-                  w-9 h-9 rounded-full flex items-center justify-center transition-all relative select-none
+                  w-10 h-10 rounded-full flex items-center justify-center transition-all relative select-none
     touch-manipulation
                   ${isPeriod ? 'bg-rose-400 shadow-sm shadow-rose-200' : ''}
                   ${isPredicted && !isPeriod ? 'border-2 border-dashed border-rose-300 bg-rose-50/50' : ''}
@@ -613,35 +614,35 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* ── Calendar button ── */}
-      <button
-        onClick={() => setShowCalendarModal(true)}
-        className="w-full rounded-3xl bg-white border border-rose-100 shadow-sm p-4 mb-4 flex items-center justify-between"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center">
-            <span className="text-xl">📅</span>
-          </div>
-          <div className="text-left">
-            <p className="text-sm font-bold text-gray-800">Period Calendar</p>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {periods.length > 0
-                ? `${cycleInfo.mergedPeriods?.length || 0} cycles logged · tap to view & edit`
-                : 'Tap to log your period dates'}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs px-2.5 py-1 rounded-full bg-rose-50 text-rose-400 font-semibold border border-rose-100">
-            Open
-          </span>
-          <svg className="w-5 h-5 text-rose-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </div>
-      </button>
+   {/* ── Calendar button ── */}
+<button
+  onClick={() => setShowCalendarModal(true)}
+  className="w-full rounded-3xl bg-white border border-rose-100 shadow-sm p-4 mb-4 flex items-center justify-between"
+>
+  <div className="flex items-center gap-3">
+    <div className="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center">
+      <span className="text-xl">📅</span>
+    </div>
+    <div className="text-left">
+      <p className="text-sm font-bold text-gray-800">Period Calendar</p>
+      <p className="text-xs text-gray-400 mt-0.5">
+        {periods.length > 0
+          ? `${cycleInfo.mergedPeriods?.length || 0} cycles logged · tap to view & edit`
+          : 'Tap to log your period dates'}
+      </p>
+    </div>
+  </div>
+  <div className="flex items-center gap-2">
+    <span className="text-xs px-2.5 py-1 rounded-full bg-rose-50 text-rose-400 font-semibold border border-rose-100">
+      Open
+    </span>
+    <svg className="w-5 h-5 text-rose-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
+  </div>
+</button>
 
-      {/* ── Selected day panel ── */}
+{/* ── Selected day panel ── */}
       {selectedDate && (
         <div className="rounded-3xl bg-white border border-rose-100 shadow-sm p-5 mb-4">
           <div className="flex items-center justify-between mb-3">
@@ -710,14 +711,7 @@ useEffect(() => {
               >
                 Today
               </button>
-              <button
-                onClick={() => setEditMode(m => !m)}
-                className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-all ${
-                  editMode ? 'bg-rose-400 text-white' : 'border border-rose-300 text-rose-400'
-                }`}
-              >
-                {editMode ? 'Done ✓' : '🩸 Edit'}
-              </button>
+             
               <button
                 onClick={() => { setShowCalendarModal(false); setEditMode(false); }}
                 className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 font-bold text-lg"
@@ -727,11 +721,7 @@ useEffect(() => {
             </div>
           </div>
 
-          {editMode && (
-            <div className="px-4 py-2 bg-rose-50 border-b border-rose-100 text-center">
-              <p className="text-xs text-rose-500 font-medium">🩸 Tap any day to mark or unmark as period</p>
-            </div>
-          )}
+
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2 border-b border-gray-50">
             {[
@@ -771,6 +761,24 @@ useEffect(() => {
                 </div>
               );
             })}
+          </div>
+
+          {/* ── Sticky bottom edit bar ── */}
+          <div className="sticky bottom-0 bg-white border-t border-gray-100 px-4 py-3">
+            <button
+              onClick={() => setEditMode(m => !m)}
+              className={`w-full py-3.5 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${
+                editMode
+                  ? 'bg-rose-400 text-white shadow-lg shadow-rose-200'
+                  : 'bg-rose-50 text-rose-500 border-2 border-rose-200'
+              }`}
+            >
+              {editMode ? (
+                <><Check className="w-4 h-4" /> Done — save period</>
+              ) : (
+                <><span className="text-base">🩸</span> Mark my period days</>
+              )}
+            </button>
           </div>
         </div>
       )}

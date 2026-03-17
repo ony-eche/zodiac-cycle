@@ -163,6 +163,23 @@ export function Paywall() {
     };
     load();
   }, []);
+  // Add this at the top of the Paywall component, after the state declarations
+useEffect(() => { 
+  // Hide Stripe test toolbar that blocks UI
+  const hideStripeBar = () => {
+    const bars = document.querySelectorAll('[data-testid="stripe-badge"], .StripeElement, iframe[name*="stripe"]');
+    // Target the floating Stripe dev toolbar specifically
+    const allIframes = document.querySelectorAll('iframe');
+    allIframes.forEach(iframe => {
+      if (iframe.src?.includes('stripe') && iframe.style?.position === 'fixed') {
+        iframe.style.display = 'none';
+      }
+    });
+  };
+  hideStripeBar();
+  const interval = setInterval(hideStripeBar, 1000);
+  return () => clearInterval(interval);
+}, []);
 
   const handleGetAccess = async () => {
   if (selected === 'free') {
