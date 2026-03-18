@@ -84,7 +84,7 @@ function getDayStatus(date: Date, cycleInfo: any): 'period' | 'predicted' | 'fer
   }
   if (cycleInfo.lastStart) {
     const daysSinceLast = differenceInDays(date, cycleInfo.lastStart);
-    if (daysSinceLast > 0) {
+    if (daysSinceLast >= 0) {
       const pos = daysSinceLast % cycleInfo.cycleLength;
       if (pos === cycleInfo.ovulationDay) return 'ovulation';
       if (pos >= cycleInfo.fertileStart && pos <= cycleInfo.fertileEnd) return 'fertile';
@@ -494,59 +494,60 @@ export function CycleTab() {
   }, [showCalendarModal]);
 
   const handleDayTap = useCallback((day: Date) => {
-    if (!editMode) {
-      setSelectedDate(day);
-      setShowCalendarModal(false);
-      return;
-    }
-    const dateStr = format(day, 'yyyy-MM-dd');
-    const existingIdx = periods.findIndex(p => {
-      const start = new Date(p.start);
-      const end = p.end ? new Date(p.end) : start;
-      return day >= start && day <= end;
-    });
-    if (existingIdx >= 0) {
-      const p = periods[existingIdx];
-      const pStart = new Date(p.start);
-      const pEnd = new Date(p.end || p.start);
-      if (isSameDay(day, pStart) && isSameDay(day, pEnd)) {
-        savePeriods(periods.filter((_, i) => i !== existingIdx));
-      } else if (isSameDay(day, pStart)) {
-        const np = [...periods];
-        np[existingIdx] = { ...p, start: format(addDays(pStart, 1), 'yyyy-MM-dd') };
-        savePeriods(np);
-      } else if (isSameDay(day, pEnd)) {
-        const np = [...periods];
-        np[existingIdx] = { ...p, end: format(addDays(pEnd, -1), 'yyyy-MM-dd') };
-        savePeriods(np);
-      } else {
-        const np = [...periods];
-        np.splice(existingIdx, 1,
-          { id: generateId(), start: p.start, end: format(addDays(day, -1), 'yyyy-MM-dd') },
-          { id: generateId(), start: format(addDays(day, 1), 'yyyy-MM-dd'), end: p.end }
-        );
-        savePeriods(np);
-      }
+  if (!editMode) {
+    setSelectedDate(day);
+    setShowCalendarModal(false);
+    setShowLogModal(true); // ← open log modal directly
+    return;
+  }
+  const dateStr = format(day, 'yyyy-MM-dd');
+  const existingIdx = periods.findIndex(p => {
+    const start = new Date(p.start);
+    const end = p.end ? new Date(p.end) : start;
+    return day >= start && day <= end;
+  });
+  if (existingIdx >= 0) {
+    const p = periods[existingIdx];
+    const pStart = new Date(p.start);
+    const pEnd = new Date(p.end || p.start);
+    if (isSameDay(day, pStart) && isSameDay(day, pEnd)) {
+      savePeriods(periods.filter((_, i) => i !== existingIdx));
+    } else if (isSameDay(day, pStart)) {
+      const np = [...periods];
+      np[existingIdx] = { ...p, start: format(addDays(pStart, 1), 'yyyy-MM-dd') };
+      savePeriods(np);
+    } else if (isSameDay(day, pEnd)) {
+      const np = [...periods];
+      np[existingIdx] = { ...p, end: format(addDays(pEnd, -1), 'yyyy-MM-dd') };
+      savePeriods(np);
     } else {
-      const nearby = periods.find(p => {
-        const pEnd = new Date(p.end || p.start);
-        const pStart = new Date(p.start);
-        return differenceInDays(day, pEnd) === 1 || differenceInDays(pStart, day) === 1;
-      });
-      if (nearby) {
-        const pEnd = new Date(nearby.end || nearby.start);
-        savePeriods(periods.map(p =>
-          p.id === nearby.id
-            ? differenceInDays(day, pEnd) === 1
-              ? { ...p, end: dateStr }
-              : { ...p, start: dateStr }
-            : p
-        ));
-      } else {
-        savePeriods([...periods, { id: generateId(), start: dateStr, end: dateStr }]);
-      }
+      const np = [...periods];
+      np.splice(existingIdx, 1,
+        { id: generateId(), start: p.start, end: format(addDays(day, -1), 'yyyy-MM-dd') },
+        { id: generateId(), start: format(addDays(day, 1), 'yyyy-MM-dd'), end: p.end }
+      );
+      savePeriods(np);
     }
-  }, [editMode, periods]);
+  } else {
+    const nearby = periods.find(p => {
+      const pEnd = new Date(p.end || p.start);
+      const pStart = new Date(p.start);
+      return differenceInDays(day, pEnd) === 1 || differenceInDays(pStart, day) === 1;
+    });
+    if (nearby) {
+      const pEnd = new Date(nearby.end || nearby.start);
+      savePeriods(periods.map(p =>
+        p.id === nearby.id
+          ? differenceInDays(day, pEnd) === 1
+            ? { ...p, end: dateStr }
+            : { ...p, start: dateStr }
+          : p
+      ));
+    } else {
+      savePeriods([...periods, { id: generateId(), start: dateStr, end: dateStr }]);
+    }
+  }
+}, [editMode, periods]); 
 
   const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null;
   const selectedLog = selectedDateStr ? logs[selectedDateStr] : null;
@@ -613,6 +614,47 @@ export function CycleTab() {
           ))}
         </div>
       </div>
+
+      {/* ── Flo-style daily banner ── */}
+      <div className="mb-4 rounded-3xl overflow-hidden shadow-sm"
+        style={{ background: `linear-gradient(135deg, ${phase.color}22, ${phase.color}08)`, border: `1px solid ${phase.color}30` }}>
+        <div className="p-5">
+          <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: phase.color }}>Today · Day {cycleInfo.cycleDay} of {cycleInfo.cycleLength}</p>
+          <p className="text-2xl font-bold text-gray-800 mb-0.5">
+            {cycleInfo.phase === 'ovulation' ? `Fertile window · Day ${cycleInfo.cycleDay - cycleInfo.fertileStart + 1} of ${cycleInfo.fertileEnd - cycleInfo.fertileStart + 1}` :
+             cycleInfo.phase === 'menstrual' ? `Period · Day ${cycleInfo.cycleDay}` :
+             cycleInfo.phase === 'follicular' ? `Building energy · Day ${cycleInfo.cycleDay}` :
+             cycleInfo.phase === 'luteal' ? `Winding down · Day ${cycleInfo.cycleDay}` :
+             `Cycle Day ${cycleInfo.cycleDay}`}
+          </p>
+          <p className="text-sm text-gray-500 mb-4">{phase.tip}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl bg-white/60 p-3">
+              <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Energy today</p>
+              <p className="text-sm font-bold text-gray-700">{phase.energy}</p>
+              <div className="mt-1.5 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{
+                  width: phase.energy === 'Peak' ? '95%' : phase.energy === 'Rising' ? '70%' : phase.energy === 'Declining' ? '35%' : '20%',
+                  background: phase.color
+                }} />
+              </div>
+            </div>
+            <div className="rounded-2xl bg-white/60 p-3">
+              <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Mood forecast</p>
+              <p className="text-sm font-bold text-gray-700">{phase.mood}</p>
+              {userData.moon_sign && (
+                <p className="text-[10px] text-gray-400 mt-1">🌙 {userData.moon_sign} Moon</p>
+              )}
+            </div>
+          </div>
+          {daysToNext > 0 && (
+            <div className="mt-3 rounded-2xl bg-white/60 p-3 flex items-center justify-between">
+              <p className="text-xs text-gray-500">Next period in</p>
+              <p className="text-sm font-bold" style={{ color: phase.color }}>{daysToNext} days</p>
+            </div>
+          )}
+        </div>
+      </div> 
 
       {/* ── Calendar button ── */}
       <button
