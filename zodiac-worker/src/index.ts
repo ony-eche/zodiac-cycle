@@ -684,7 +684,7 @@ export default {
         });
       }
     }
-
+    
     // ── Claude AI ──────────────────────────────────────────────────────────
     if (path === '/ai/predict' && request.method === 'POST') {
       try {
