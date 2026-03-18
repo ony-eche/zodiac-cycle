@@ -96,12 +96,12 @@ function getDayStatus(date: Date, cycleInfo: any): 'period' | 'predicted' | 'fer
   return 'normal';
 }
 
-const PHASE_INSIGHTS: Record<string, { emoji: string; label: string; gradientFrom: string; gradientTo: string; textColor: string; tip: string; energy: string; mood: string; energyPct: number }> = {
-  menstrual:  { emoji: '🔴', label: 'Menstrual',  gradientFrom: '#ff6b8a', gradientTo: '#ff8fa3', textColor: '#fff', tip: 'Rest is productive. Honour your body with warmth and gentle movement.', energy: 'Low', mood: 'Reflective', energyPct: 20 },
-  follicular: { emoji: '🌸', label: 'Follicular', gradientFrom: '#c084fc', gradientTo: '#e879f9', textColor: '#fff', tip: 'Estrogen is rising! Great time to start new projects and socialise.', energy: 'Rising', mood: 'Optimistic', energyPct: 70 },
-  ovulation:  { emoji: '⭐', label: 'Ovulation',  gradientFrom: '#f59e0b', gradientTo: '#fbbf24', textColor: '#fff', tip: 'Peak fertility and confidence. Ideal for big presentations.', energy: 'Peak', mood: 'Social', energyPct: 95 },
-  luteal:     { emoji: '🌙', label: 'Luteal',     gradientFrom: '#818cf8', gradientTo: '#a5b4fc', textColor: '#fff', tip: 'Progesterone peaks then drops. Focus on completing tasks.', energy: 'Declining', mood: 'Introspective', energyPct: 35 },
-  unknown:    { emoji: '✨', label: 'Unknown',    gradientFrom: '#c084fc', gradientTo: '#818cf8', textColor: '#fff', tip: 'Log your period dates to unlock personalised cycle insights.', energy: '—', mood: '—', energyPct: 0 },
+const PHASE_INSIGHTS: Record<string, { emoji: string; label: string; gradientFrom: string; gradientTo: string; textColor: string; energy: string; mood: string }> = {
+  menstrual:  { emoji: '🔴', label: 'Menstrual',  gradientFrom: '#ff6b8a', gradientTo: '#ff8fa3', textColor: '#fff', energy: 'Low', mood: 'Reflective' },
+  follicular: { emoji: '🌸', label: 'Follicular', gradientFrom: '#c084fc', gradientTo: '#e879f9', textColor: '#fff', energy: 'Rising', mood: 'Optimistic' },
+  ovulation:  { emoji: '⭐', label: 'Ovulation',  gradientFrom: '#f59e0b', gradientTo: '#fbbf24', textColor: '#fff', energy: 'Peak', mood: 'Social' },
+  luteal:     { emoji: '🌙', label: 'Luteal',     gradientFrom: '#818cf8', gradientTo: '#a5b4fc', textColor: '#fff', energy: 'Declining', mood: 'Introspective' },
+  unknown:    { emoji: '✨', label: 'Unknown',    gradientFrom: '#c084fc', gradientTo: '#818cf8', textColor: '#fff', energy: '—', mood: '—' },
 };
 
 // ─── Log Modal ────────────────────────────────────────────────────────────────
@@ -259,6 +259,7 @@ function SymptomTrends({ logs }: { logs: Record<string, DayLog> }) {
     </div>
   );
 }
+
 
 // ─── Cycle History ────────────────────────────────────────────────────────────
 function CycleHistory({ cycleInfo, onEdit }: { cycleInfo: any; onEdit: (p: PeriodEntry) => void }) {
@@ -487,13 +488,23 @@ export function CycleTab() {
   const weekStart = startOfWeek(new Date());
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  const heroLabel =
-    cycleInfo.phase === 'ovulation' ? `Fertile window · Day ${cycleInfo.cycleDay - cycleInfo.fertileStart + 1} of ${cycleInfo.fertileEnd - cycleInfo.fertileStart + 1}` :
-    cycleInfo.phase === 'menstrual' ? `Period · Day ${cycleInfo.cycleDay}` :
-    cycleInfo.phase === 'follicular' ? `Building energy · Day ${cycleInfo.cycleDay}` :
-    cycleInfo.phase === 'luteal' ? `Winding down · Day ${cycleInfo.cycleDay}` :
-    `Cycle Day ${cycleInfo.cycleDay}`;
+ const phaseNames: Record<string, string> = {
+  menstrual: t('cycle.phases.menstrual' as any) || 'Menstrual Phase',
+  follicular: t('cycle.phases.follicular' as any) || 'Follicular Phase',
+  ovulation: t('cycle.phases.ovulation' as any) || 'Ovulation Phase',
+  luteal: t('cycle.phases.luteal' as any) || 'Luteal Phase',
+  unknown: 'Log your cycle',
+};
 
+const phaseTips: Record<string, string> = {
+  menstrual: t('cycle.phaseDesc.menstrual' as any) || 'Rest is productive. Honour your body with warmth and gentle movement.',
+  follicular: t('cycle.phaseDesc.follicular' as any) || 'Estrogen is rising! Great time to start new projects and socialise.',
+  ovulation: t('cycle.phaseDesc.ovulation' as any) || 'Peak fertility and confidence. Ideal for big presentations.',
+  luteal: t('cycle.phaseDesc.luteal' as any) || 'Progesterone peaks then drops. Focus on completing tasks.',
+  unknown: 'Log your period dates to unlock personalised cycle insights.',
+};
+
+const heroLabel = `${phaseNames[cycleInfo.phase] || 'Cycle'} · Day ${cycleInfo.cycleDay}`;
   return (
     <div className="pb-28">
 
@@ -506,7 +517,7 @@ export function CycleTab() {
               {format(new Date(), 'EEEE, MMMM d')}
             </p>
             <p className="text-3xl font-bold mt-1" style={{ color: phase.textColor }}>{heroLabel}</p>
-            <p className="text-sm opacity-80 mt-1" style={{ color: phase.textColor }}>{phase.tip}</p>
+            <p className="text-sm opacity-80 mt-1" style={{ color: phase.textColor }}>{phaseTips[cycleInfo.phase]}</p>
           </div>
           <div className="text-4xl ml-3 mt-1">{phase.emoji}</div>
         </div>
@@ -668,6 +679,56 @@ export function CycleTab() {
             <p className="text-xs text-gray-400">Tap "Log day" to track symptoms, mood and flow.</p>
           )}
         </div>
+
+        {cycleInfo.phase !== 'unknown' && (
+  <div className="rounded-3xl mb-4 overflow-hidden"
+    style={{ background: `linear-gradient(135deg, ${phase.gradientFrom}15, ${phase.gradientTo}08)`, border: `1px solid ${phase.gradientFrom}30` }}>
+    <div className="p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xl">{phase.emoji}</span>
+        <p className="font-bold text-gray-800 text-sm">{phaseNames[cycleInfo.phase]} — What to expect</p>
+      </div>
+      <div className="space-y-3 mb-4">
+        {cycleInfo.phase === 'menstrual' && <>
+          <p className="text-xs text-gray-600 leading-relaxed">🩸 <strong>Body:</strong> Your uterine lining is shedding. Cramping, bloating and fatigue are normal. Rest is not laziness — it's biology.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">💭 <strong>Mind:</strong> You may feel introspective and withdrawn. This is a natural reset — honour it.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">✨ <strong>Best for:</strong> Rest, journaling, gentle yoga, warm baths, iron-rich foods.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">⚠️ <strong>Watch out for:</strong> Overcommitting, high intensity workouts, caffeine excess.</p>
+        </>}
+        {cycleInfo.phase === 'follicular' && <>
+          <p className="text-xs text-gray-600 leading-relaxed">🌸 <strong>Body:</strong> Estrogen is rising. Energy is returning, skin may be clearer, and you may feel more physically capable.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">💭 <strong>Mind:</strong> Creativity and optimism are peaking. Your brain is literally sharper right now.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">✨ <strong>Best for:</strong> Starting new projects, social plans, trying new workouts, brainstorming.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">⚠️ <strong>Watch out for:</strong> Overplanning — you'll feel less energetic later in the cycle.</p>
+        </>}
+        {cycleInfo.phase === 'ovulation' && <>
+          <p className="text-xs text-gray-600 leading-relaxed">⭐ <strong>Body:</strong> Estrogen peaks and LH surges. You may notice increased body temperature and heightened libido.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">💭 <strong>Mind:</strong> You're at your most confident, magnetic and communicative.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">✨ <strong>Best for:</strong> Important meetings, dates, presentations, high intensity workouts.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">⚠️ <strong>Watch out for:</strong> Overextending yourself socially — your energy will shift soon.</p>
+        </>}
+        {cycleInfo.phase === 'luteal' && <>
+          <p className="text-xs text-gray-600 leading-relaxed">🌙 <strong>Body:</strong> Progesterone rises then falls. You may notice bloating, breast tenderness, and appetite changes.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">💭 <strong>Mind:</strong> Sensitivity increases. Your intuition is sharp but patience may be thinner.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">✨ <strong>Best for:</strong> Completing tasks, detail work, decluttering, strength training.</p>
+          <p className="text-xs text-gray-600 leading-relaxed">⚠️ <strong>Watch out for:</strong> Sugar and alcohol — they amplify PMS symptoms significantly.</p>
+        </>}
+      </div>
+      <div className="rounded-2xl p-3" style={{ background: 'rgba(255,255,255,0.6)' }}>
+        {Object.keys(logs).length === 0 ? (
+          <p className="text-xs text-gray-500 text-center">📝 Log your symptoms daily to get personalised insights</p>
+        ) : (
+          <p className="text-xs text-gray-500 text-center">✅ You've logged {Object.keys(logs).length} day{Object.keys(logs).length !== 1 ? 's' : ''} — keep going to unlock pattern insights 🌙</p>
+        )}
+        <button onClick={() => setShowLogModal(true)}
+          className="w-full mt-2 py-2 rounded-xl text-xs font-bold text-center"
+          style={{ background: `${phase.gradientFrom}20`, color: phase.gradientFrom }}>
+          + Log today's symptoms
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
         <CycleHistory cycleInfo={cycleInfo} onEdit={setEditingPeriod} />
         <SymptomTrends logs={logs} />
