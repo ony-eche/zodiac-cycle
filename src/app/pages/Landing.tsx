@@ -81,6 +81,15 @@ export function Landing() {
           >
             {t('welcome.cta')}
           </Button>
+          <p className="text-sm text-muted-foreground mt-4">
+           Already have an account?{' '}
+          <button
+          onClick={() => navigate('/login')}
+          className="text-primary underline hover:opacity-80"
+          >
+          Sign in
+          </button>
+          </p> 
 
           <p className="text-xs text-muted-foreground mt-4">
             {t('landing.subCta')}

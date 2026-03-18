@@ -336,6 +336,116 @@ async function generateInsightPreview(env: any, user: any, cycleDay: number, pha
     return `Your ${phase} energy is alive today — open ZodiacCycle for your full reading.`;
   }
 }
+async function runMiddayCron(env: any): Promise<void> {
+  console.log('Midday cron starting');
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/profiles?select=id,email,name,sun_sign,moon_sign,last_period_start,notif_push,notif_email,has_paid`,
+      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!res.ok) return;
+    const users = await res.json() as any[];
+
+    for (const user of users) {
+      if (!user.email) continue;
+      const cycleDay = getCycleDayForUser(user);
+      const phase = getCyclePhase(cycleDay);
+      const { title, body } = getMidnayNotification(user, cycleDay, phase);
+
+      if (user.notif_push) {
+        const subs = await getUserSubs(env, user.id);
+        if (subs.length > 0) await sendPush(env, subs, title, body, '/');
+      }
+    }
+    console.log('Midday cron done');
+  } catch (err) { console.error('Midday cron error:', err); }
+}
+
+async function runEveningCron(env: any): Promise<void> {
+  console.log('Evening cron starting');
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/profiles?select=id,email,name,sun_sign,moon_sign,last_period_start,notif_push,has_paid`,
+      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!res.ok) return;
+    const users = await res.json() as any[];
+
+    for (const user of users) {
+      if (!user.email) continue;
+      const cycleDay = getCycleDayForUser(user);
+      const phase = getCyclePhase(cycleDay);
+      const { title, body } = getEveningNotification(user, phase);
+
+      if (user.notif_push) {
+        const subs = await getUserSubs(env, user.id);
+        if (subs.length > 0) await sendPush(env, subs, title, body, '/');
+      }
+    }
+    console.log('Evening cron done');
+  } catch (err) { console.error('Evening cron error:', err); }
+}
+
+async function runNightCron(env: any): Promise<void> {
+  console.log('Night cron starting');
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/profiles?select=id,email,name,sun_sign,moon_sign,last_period_start,notif_push,has_paid`,
+      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!res.ok) return;
+    const users = await res.json() as any[];
+
+    for (const user of users) {
+      if (!user.email) continue;
+      const cycleDay = getCycleDayForUser(user);
+      const phase = getCyclePhase(cycleDay);
+      const { title, body } = getNightNotification(user, phase);
+
+      if (user.notif_push) {
+        const subs = await getUserSubs(env, user.id);
+        if (subs.length > 0) await sendPush(env, subs, title, body, '/');
+      }
+    }
+    console.log('Night cron done');
+  } catch (err) { console.error('Night cron error:', err); }
+}
+
+async function runWeeklyCron(env: any): Promise<void> {
+  console.log('Weekly cron starting');
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/profiles?select=id,email,name,sun_sign,moon_sign,last_period_start,notif_push,notif_email,has_paid`,
+      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+    );
+    if (!res.ok) return;
+    const users = await res.json() as any[];
+
+    for (const user of users) {
+      if (!user.email) continue;
+      const cycleDay = getCycleDayForUser(user);
+      const phase = getCyclePhase(cycleDay);
+      const daysUntil = 28 - cycleDay;
+      const { title, body } = getWeeklySummary(user, cycleDay, phase, daysUntil);
+
+      if (user.notif_push) {
+        const subs = await getUserSubs(env, user.id);
+        if (subs.length > 0) await sendPush(env, subs, title, body, '/');
+      }
+      if (user.notif_email) {
+        const html = emailBase(`<div class="card">
+          <h1>${title}</h1>
+          <p>${body}</p>
+          <div style="text-align:center;margin:24px 0">
+            <a href="https://zodiaccycle.app" class="btn">Open ZodiacCycle ✨</a>
+          </div>
+        </div>`);
+        await sendEmail(env, user.email, title, html);
+      }
+    }
+    console.log('Weekly cron done');
+  } catch (err) { console.error('Weekly cron error:', err); }
+}
 
 // ─── Phase tips ───────────────────────────────────────────────────────────────
 const PHASE_TIPS: Record<string, string> = {
@@ -344,7 +454,94 @@ const PHASE_TIPS: Record<string, string> = {
   Ovulation: 'Peak fertility and confidence. Ideal for big presentations and important conversations.',
   Luteal: 'Progesterone peaks then drops. Focus on completing tasks and winding down.',
 };
+// ─── Smart notification templates ────────────────────────────────────────────
 
+const MOON_MOODS: Record<string, string> = {
+  Aries: 'bold and action-oriented', Taurus: 'grounded and sensory', Gemini: 'curious and chatty',
+  Cancer: 'nurturing and intuitive', Leo: 'expressive and warm', Virgo: 'analytical and detail-focused',
+  Libra: 'balanced and social', Scorpio: 'intense and perceptive', Sagittarius: 'adventurous and optimistic',
+  Capricorn: 'focused and ambitious', Aquarius: 'inventive and detached', Pisces: 'dreamy and empathetic',
+};
+
+const PHASE_MIDDAY: Record<string, string> = {
+  Menstrual: 'Rest over productivity today — your body is doing deep work',
+  Follicular: 'Great time to brainstorm or start something new this afternoon',
+  Ovulation: 'You\'re magnetic right now — perfect for calls, meetings, connections',
+  Luteal: 'Tie up loose ends this afternoon before your energy winds down',
+};
+
+const PHASE_NIGHT: Record<string, string> = {
+  Menstrual: 'What did your body ask for today? Log it before you rest 🌙',
+  Follicular: 'You\'re building momentum — what felt good today?',
+  Ovulation: 'Peak days are precious — capture how you felt today',
+  Luteal: 'How did your energy hold up? Your patterns matter 🌙',
+};
+
+const SUN_EVENING: Record<string, string> = {
+  Aries: 'Mars is always moving — check your evening transits',
+  Taurus: 'Venus rules your chart — see how tonight\'s sky touches you',
+  Gemini: 'Mercury\'s position shifts your communication energy tonight',
+  Cancer: 'The Moon moves fast — check how it aspects your chart right now',
+  Leo: 'The Sun\'s transits hit differently for you — open your chart',
+  Virgo: 'Mercury is active in your chart this evening',
+  Libra: 'Venus is aspecting something in your chart right now',
+  Scorpio: 'Pluto\'s slow burn is always active — check tonight\'s transits',
+  Sagittarius: 'Jupiter is expanding something in your chart tonight',
+  Capricorn: 'Saturn is structuring tonight\'s energy for you specifically',
+  Aquarius: 'Uranus is stirring something unexpected in your chart',
+  Pisces: 'Neptune softens tonight\'s transits in a way only you feel',
+};
+
+const WEEKLY_PHASE_SUMMARY: Record<string, string> = {
+  Menstrual: 'You\'re in your rest phase this week — honour the slow',
+  Follicular: 'Fresh energy is building this week — plant seeds now',
+  Ovulation: 'This is your peak week — show up fully',
+  Luteal: 'Wind-down week — complete, reflect, release',
+};
+
+function getMidnayNotification(user: any, cycleDay: number, phase: string): { title: string; body: string } {
+  const name = user.name ? `, ${user.name}` : '';
+  const moonMood = MOON_MOODS[user.moon_sign] || 'intuitive';
+  const phaseMsg = PHASE_MIDDAY[phase] || 'Check in with your body this afternoon';
+  return {
+    title: `🌿 Midday check-in${name}`,
+    body: `Your ${user.moon_sign || ''} Moon is feeling ${moonMood} today. ${phaseMsg}.`,
+  };
+}
+
+function getEveningNotification(user: any, phase: string): { title: string; body: string } {
+  const sunMsg = SUN_EVENING[user.sun_sign] || 'The planets are active in your chart tonight';
+  return {
+    title: '⭐ Your evening transits are active',
+    body: `${sunMsg}. Day ${user.cycleDay || ''} of your ${phase} phase.`,
+  };
+}
+
+function getNightNotification(user: any, phase: string): { title: string; body: string } {
+  const name = user.name ? `${user.name}, ` : '';
+  const phaseMsg = PHASE_NIGHT[phase] || 'Log today before you sleep 🌙';
+  return {
+    title: `🔮 ${name}log today before you sleep`,
+    body: phaseMsg,
+  };
+}
+
+function getWeeklySummary(user: any, cycleDay: number, phase: string, daysUntilPeriod: number): { title: string; body: string } {
+  const name = user.name ? `, ${user.name}` : '';
+  const phaseMsg = WEEKLY_PHASE_SUMMARY[phase] || 'A new week with your cycle';
+  return {
+    title: `🌙 Your week ahead${name}`,
+    body: `${phaseMsg}. ${daysUntilPeriod > 0 ? `Period in ${daysUntilPeriod} days.` : 'Period due soon.'} ☀️ ${user.sun_sign || ''}`,
+  };
+}
+
+function getCycleDayForUser(user: any): number {
+  if (!user.last_period_start) return 14;
+  const daysSince = Math.floor(
+    (new Date().getTime() - new Date(user.last_period_start).getTime()) / 86400000
+  );
+  return Math.max(1, (daysSince % 28) + 1);
+}
 // ─── Main cron logic ─────────────────────────────────────────────────────────
 async function runDailyCron(env: any): Promise<void> {
   console.log('Cron starting:', new Date().toISOString());
@@ -439,9 +636,16 @@ async function runDailyCron(env: any): Promise<void> {
 
 // ─── Main worker ──────────────────────────────────────────────────────────────
 export default {
-  async scheduled(_event: any, env: any, _ctx: any): Promise<void> {
-    await runDailyCron(env);
-  },
+  async scheduled(event: any, env: any, _ctx: any): Promise<void> {
+  const cron = event.cron;
+  console.log('Cron triggered:', cron);
+
+  if (cron === '0 8 * * *')  await runDailyCron(env);
+  if (cron === '0 12 * * *') await runMiddayCron(env);
+  if (cron === '0 18 * * *') await runEveningCron(env);
+  if (cron === '0 21 * * *') await runNightCron(env);
+  if (cron === '0 8 * * 1')  await runWeeklyCron(env);
+},
 
   async fetch(request: Request, env: any): Promise<Response> { 
     const corsHeaders = {
@@ -627,7 +831,57 @@ export default {
         });
       }
     }
+if (path === '/cron/midday' && request.method === 'POST') {
+  try {
+    await runMiddayCron(env);
+    return new Response(JSON.stringify({ ok: true, message: 'Midday cron ran' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
 
+if (path === '/cron/evening' && request.method === 'POST') {
+  try {
+    await runEveningCron(env);
+    return new Response(JSON.stringify({ ok: true, message: 'Evening cron ran' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+if (path === '/cron/night' && request.method === 'POST') {
+  try {
+    await runNightCron(env);
+    return new Response(JSON.stringify({ ok: true, message: 'Night cron ran' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+if (path === '/cron/weekly' && request.method === 'POST') {
+  try {
+    await runWeeklyCron(env);
+    return new Response(JSON.stringify({ ok: true, message: 'Weekly cron ran' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
     // ── Stripe: Create payment intent ──────────────────────────────────────
     if (path === '/stripe/create-payment-intent' && request.method === 'POST') {
       try {

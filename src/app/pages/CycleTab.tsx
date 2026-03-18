@@ -342,13 +342,18 @@ function MonthCalendar({ month, periods, cycleInfo, editMode, onDayTap }: {
   const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) });
   const startPad = startOfMonth(month).getDay();
   const [tappedDay, setTappedDay] = useState<string | null>(null);
-
-  const handleTap = (day: Date) => {
-    const key = format(day, 'yyyy-MM-dd');
-    setTappedDay(key);
-    setTimeout(() => setTappedDay(null), 300);
-    onDayTap(day);
-  };
+ const tapping = useRef(false);
+ const handleTap = (day: Date) => {
+  if (tapping.current) return;
+  tapping.current = true;
+  const key = format(day, 'yyyy-MM-dd');
+  setTappedDay(key);
+  setTimeout(() => {
+    setTappedDay(null);
+    tapping.current = false;
+  }, 350);
+  onDayTap(day);
+};
 
   return (
     <div className="px-4">
@@ -375,7 +380,7 @@ function MonthCalendar({ month, periods, cycleInfo, editMode, onDayTap }: {
           return (
             <div key={dateStr} className="flex flex-col items-center justify-center" style={{ height: 56 }}>
               <button
-                onPointerDown={() => handleTap(day)}
+                onClick={() => handleTap(day)}
                 className="relative flex items-center justify-center rounded-full transition-transform select-none"
                 style={{
                   width: 44,
@@ -426,6 +431,7 @@ function MonthCalendar({ month, periods, cycleInfo, editMode, onDayTap }: {
                   TODAY
                 </span>
               )}
+           
             </div>
           );
         })}
@@ -678,20 +684,29 @@ export function CycleTab() {
         <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#fff' }}>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <button
-              onClick={() => { setShowCalendarModal(false); setEditMode(false); }}
-              className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center"
-            >
-              <X className="w-4 h-4 text-gray-500" />
-            </button>
-            <p className="text-base font-bold text-gray-800">Period Calendar</p>
-            <button
-              onClick={() => setCalendarMonth(new Date())}
-              className="text-xs px-3 py-1.5 rounded-full border border-rose-200 text-rose-400 font-semibold"
-            >
-              Today
-            </button>
-          </div>
+  <button
+    onClick={() => { setShowCalendarModal(false); setEditMode(false); }}
+    className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center"
+  >
+    <X className="w-4 h-4 text-gray-500" />
+  </button>
+  <p className="text-base font-bold text-gray-800">Period Calendar</p>
+  <div className="flex items-center gap-2">
+    <button
+      onClick={() => { if (window.confirm('Clear all?')) savePeriods([]); }}
+      className="text-xs px-2 py-1 rounded-full border border-rose-200 text-rose-400 font-medium"
+    >
+      Clear
+    </button>
+    <button
+      onClick={() => setCalendarMonth(new Date())}
+      className="text-xs px-3 py-1.5 rounded-full border border-rose-200 text-rose-400 font-semibold"
+    >
+      Today
+    </button>
+  </div>
+</div> 
+         
 
           {/* Legend */}
           <div className="flex items-center gap-4 px-4 py-2 border-b border-gray-50">

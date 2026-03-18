@@ -220,15 +220,22 @@ useEffect(() => {
     setLoadingIntent(false);
   }
 };
-  const handlePaymentSuccess = () => {
-    updateUserData({
-      hasPaid: true,
-      currency: currency?.code,
-      stripe_customer_id: stripeCustomerId ?? undefined,
-    });
-    setShowPaymentForm(false);
+const handlePaymentSuccess = () => {
+  updateUserData({
+    hasPaid: true,
+    currency: currency?.code,
+    stripe_customer_id: stripeCustomerId ?? undefined,
+  });
+  setShowPaymentForm(false);
+  
+  // If user has no account yet (no email in userData), go to signup
+  // If user already has an account, go to dashboard
+  if (!userData.email) {
+    navigate('/signup');
+  } else {
     navigate('/dashboard');
-  };
+  }
+}; 
 
 const features = [
   t('paywall.features.chart'),

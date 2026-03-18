@@ -292,48 +292,84 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
         </div>
       )}
 
+      {/* Push notifications — special handling for iOS */}
+<div className="flex items-center justify-between py-3 border-b border-white/10">
+  <div className="flex items-center gap-3">
+    <div className="w-8 h-8 rounded-xl glass border border-white/30 flex items-center justify-center">
+      <Smartphone className="w-4 h-4 text-primary" />
+    </div>
+    <div>
+      <p className="text-sm font-medium">Push Notifications</p>
+      <p className="text-xs text-muted-foreground">
+        {pushStatus === 'granted' ? '✅ Active on this device' : 'Tap to enable on this device'}
+      </p>
+    </div>
+  </div>
+  {pushStatus === 'granted' ? (
+    <button
+      onClick={() => update('push', false)}
+      className="relative w-12 h-6 rounded-full transition-all duration-300 bg-primary"
+    >
+      <div className="absolute top-0.5 left-6 w-5 h-5 rounded-full bg-white shadow transition-all duration-300" />
+    </button>
+  ) : (
+    <button
+      onClick={async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const ok = await requestPushPermission(user.id);
+        if (ok) {
+          setPushStatus('granted');
+          const next = { ...settings, push: true };
+          setSettings(next);
+          localStorage.setItem('zodiac_notif_settings', JSON.stringify(next));
+        } else {
+          alert('Could not enable push notifications. Make sure notifications are allowed for ZodiacCycle in your iPhone Settings → Notifications.');
+        }
+      }}
+      className="px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold border border-primary/30"
+    >
+      Enable
+    </button>
+  )}
+</div> 
+
       {/* Delivery channels */}
-      <div className="glass rounded-3xl p-5 border border-white/40">
-        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-4">How to notify you</h3>
-        <div className="space-y-1">
-          {[
-            {
-              k: 'push',
-              icon: <Smartphone className="w-4 h-4 text-primary" />,
-              label: 'Push Notifications',
-              sub: pushStatus === 'granted' ? '✅ Active on this device' : 'Tap to enable on this device',
-            },
-            {
-              k: 'email',
-              icon: <Mail className="w-4 h-4 text-primary" />,
-              label: 'Email Notifications',
-              sub: userData.email || 'Period reminders & weekly digest',
-            },
-            {
-              k: 'inApp',
-              icon: <Bell className="w-4 h-4 text-primary" />,
-              label: 'In-App Notifications',
-              sub: 'Bell icon in dashboard',
-            },
-          ].map(item => (
-            <div key={item.k} className="flex items-center justify-between py-3 border-b border-white/10 last:border-0">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl glass border border-white/30 flex items-center justify-center">{item.icon}</div>
-                <div>
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-muted-foreground">{item.sub}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => update(item.k, !settings[item.k])}
-                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[item.k] ? 'bg-primary' : 'bg-border'}`}
-              >
-                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${settings[item.k] ? 'left-6' : 'left-0.5'}`} />
-              </button>
-            </div>
-          ))}
+    <div className="glass rounded-3xl p-5 border border-white/40">
+  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-4">How to notify you</h3>
+  <div className="space-y-1">
+    {[
+      {
+        k: 'email',
+        icon: <Mail className="w-4 h-4 text-primary" />,
+        label: 'Email Notifications',
+        sub: userData.email || 'Period reminders & daily insights',
+      },
+      {
+        k: 'inApp',
+        icon: <Bell className="w-4 h-4 text-primary" />,
+        label: 'In-App Notifications',
+        sub: 'Bell icon in dashboard',
+      },
+    ].map(item => (
+      <div key={item.k} className="flex items-center justify-between py-3 border-b border-white/10 last:border-0">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl glass border border-white/30 flex items-center justify-center">{item.icon}</div>
+          <div>
+            <p className="text-sm font-medium">{item.label}</p>
+            <p className="text-xs text-muted-foreground">{item.sub}</p>
+          </div>
         </div>
+        <button
+          onClick={() => update(item.k, !settings[item.k])}
+          className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[item.k] ? 'bg-primary' : 'bg-border'}`}
+        >
+          <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${settings[item.k] ? 'left-6' : 'left-0.5'}`} />
+        </button>
       </div>
+    ))}
+  </div>
+</div> 
 
       {/* What to notify */}
       <div className="glass rounded-3xl p-5 border border-white/40">
