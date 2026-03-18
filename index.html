@@ -6,6 +6,10 @@
     <meta name="description" content="Track your menstrual cycle and discover your astrological chart. Daily cosmic insights personalized to your birth chart and cycle phase." />
     <title>ZodiacCycle</title>
 
+    <style>
+      body > iframe[src*="stripe"] { display: none !important; }
+    </style>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -18,7 +22,6 @@
       <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet" />
     </noscript>
 
-    <!-- Google AdSense -->
     <script
       async
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1630059411730326"
@@ -29,8 +32,4 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
-  <style>
-  /* Hide Stripe dev toolbar in test mode */
-  body > iframe[src*="stripe"] { display: none !important; }
-</style>
-</html>
+</html> 

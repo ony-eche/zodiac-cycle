@@ -74,6 +74,19 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+  rollupOptions: {
+    output: {
+      manualChunks: {
+        'vendor-react': ['react', 'react-dom'],
+        'vendor-router': ['react-router'],
+        'vendor-stripe': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
+        'vendor-supabase': ['@supabase/supabase-js'],
+        'vendor-i18n': ['i18next', 'react-i18next'],
+      }
+    }
+  }
+},
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
