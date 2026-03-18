@@ -3,7 +3,8 @@ import { Moon, Star, Sparkles, Heart, ChevronRight } from 'lucide-react';
 import { format, addDays, differenceInDays } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { getCachedPredictions } from '../../lib/predictions';
-import { AdBanner } from '../components/AdBanner';
+import { lazy, Suspense } from 'react';
+const AdBanner = lazy(() => import('../components/AdBanner').then(m => ({ default: m.AdBanner })));
 
 function getZodiacSign(date: Date): string {
   const month = date.getMonth() + 1;
@@ -199,9 +200,10 @@ export function HomeTab({ onNavigateToMessages }: HomeTabProps) {
 
       {/* Ad banner — only for free users */}
       {!isPremium && (
-        <AdBanner slot={import.meta.env.VITE_AD_SLOT_CYCLE} format="horizontal" />
-      )}
-
+  <Suspense fallback={<div className="h-16" />}>
+    <AdBanner slot={import.meta.env.VITE_AD_SLOT_CYCLE} format="horizontal" />
+  </Suspense>
+)} 
     </div>
   );
 } 

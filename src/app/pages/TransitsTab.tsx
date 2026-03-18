@@ -7,7 +7,8 @@ import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import i18n from '../../lib/i18n';
 import { cacheTransitSummary } from '../../lib/notifications';
-import { AdBanner } from '../components/AdBanner';
+import { lazy, Suspense } from 'react';
+const AdBanner = lazy(() => import('../components/AdBanner').then(m => ({ default: m.AdBanner })));
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 
@@ -33,6 +34,7 @@ const SIGN_TRANSLATIONS: Record<string, Record<string, string>> = {
   Spanish: { Aries: 'Aries', Taurus: 'Tauro', Gemini: 'Géminis', Cancer: 'Cáncer', Leo: 'Leo', Virgo: 'Virgo', Libra: 'Libra', Scorpio: 'Escorpio', Sagittarius: 'Sagitario', Capricorn: 'Capricornio', Aquarius: 'Acuario', Pisces: 'Piscis' },
   Portuguese: { Aries: 'Áries', Taurus: 'Touro', Gemini: 'Gêmeos', Cancer: 'Câncer', Leo: 'Leão', Virgo: 'Virgem', Libra: 'Libra', Scorpio: 'Escorpião', Sagittarius: 'Sagitário', Capricorn: 'Capricórnio', Aquarius: 'Aquário', Pisces: 'Peixes' },
 };
+ 
 
 function translateSign(sign: string, language: string): string {
   return SIGN_TRANSLATIONS[language]?.[sign] || sign;
@@ -398,11 +400,13 @@ export function TransitsTab() {
         </div>
       </Card>
 
-      <AdBanner
-        slot={import.meta.env.VITE_AD_SLOT_TRANSITS}
-        format="horizontal"
-        className="mt-2 mb-4"
-      />
+      <Suspense fallback={<div className="h-16" />}>
+  <AdBanner
+    slot={import.meta.env.VITE_AD_SLOT_TRANSITS}
+    format="horizontal"
+    className="mt-2 mb-4"
+  />
+</Suspense>
     </div>
   );
 } 
