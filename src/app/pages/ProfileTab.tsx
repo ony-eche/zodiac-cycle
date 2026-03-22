@@ -315,9 +315,10 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
   ) : (
     <button
       onClick={async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const ok = await requestPushPermission(user.id);
+  const { data: { user } } = await supabase.auth.getUser();
+  alert('User ID: ' + (user?.id || 'NULL - not logged in'));
+  if (!user) return;
+  const ok = await requestPushPermission(user.id);
         if (ok) {
           setPushStatus('granted');
           const next = { ...settings, push: true };
