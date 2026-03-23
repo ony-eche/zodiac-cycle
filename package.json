@@ -1,8 +1,8 @@
 {
   "name": "zodiac-cycle",
   "engines": {
-  "node": ">=20.0.0"
-},
+  "node": ">=20.x"
+}, 
   "private": true,
   "version": "0.0.1",
   "type": "module",
