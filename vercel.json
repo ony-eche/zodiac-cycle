@@ -1,15 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/icons/(.*)",
-      "destination": "/icons/$1"
-    },
-    {
-      "source": "/assets/(.*)",
-      "destination": "/assets/$1"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/:path((?!icons|assets|favicon|manifest|registerSW|sw).*)",
       "destination": "/index.html"
     }
   ]
