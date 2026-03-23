@@ -1,0 +1,27 @@
+name: Send ZodiacCycle Notifications
+
+on:
+  schedule:
+    # This runs at 8 AM UTC every day
+    - cron: '0 8 * * *'
+    # This runs at 12 PM UTC every day (midday)
+    - cron: '0 12 * * *'
+    # This runs at 6 PM UTC every day (evening)
+    - cron: '0 18 * * *'
+    # This runs at 9 PM UTC every day (night)
+    - cron: '0 21 * * *'
+    # This runs at 8 AM UTC every Monday
+    - cron: '0 8 * * 1'
+  # This lets you run it manually from GitHub website
+  workflow_dispatch:
+
+jobs:
+  send-notifications:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Send daily notifications
+        run: |
+          echo "🔄 Sending notifications at $(date)"
+          curl -X POST https://zodiac-worker.zodiac-app.workers.dev/cron/test
+          echo "✅ Notifications sent!"
