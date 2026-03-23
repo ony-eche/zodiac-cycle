@@ -1,8 +1,5 @@
 {
   "rewrites": [
-    {
-      "source": "/:path((?!icons|assets|favicon|manifest|registerSW|sw).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
