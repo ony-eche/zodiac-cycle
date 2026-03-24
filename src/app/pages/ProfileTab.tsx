@@ -522,6 +522,110 @@ function InstallAppGuide({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+}// ─── Share Card ───────────────────────────────────────────────────────────────
+function ShareCard({ onClose }: { onClose: () => void }) {
+  const { userData } = useUserData();
+  const [shared, setShared] = useState(false);
+
+  const cycleDay = userData.lastPeriodStart
+    ? Math.max(1, Math.floor((Date.now() - new Date(userData.lastPeriodStart).getTime()) / 86400000) % 28 + 1)
+    : 14;
+
+  const phase = cycleDay <= 5 ? 'Menstrual' : cycleDay <= 13 ? 'Follicular' : cycleDay <= 16 ? 'Ovulation' : 'Luteal';
+  const phaseEmoji = { Menstrual: '🔴', Follicular: '🌸', Ovulation: '⭐', Luteal: '🌙' }[phase];
+  const phaseGradient = {
+    Menstrual: 'from-rose-400 to-pink-400',
+    Follicular: 'from-purple-400 to-fuchsia-400',
+    Ovulation: 'from-amber-400 to-yellow-400',
+    Luteal: 'from-indigo-400 to-purple-400',
+  }[phase];
+  const energy = { Menstrual: 'Low', Follicular: 'Rising', Ovulation: 'Peak', Luteal: 'Declining' }[phase];
+  const mood = { Menstrual: 'Reflective', Follicular: 'Optimistic', Ovulation: 'Social', Luteal: 'Introspective' }[phase];
+
+  const handleShare = async () => {
+    const text = `✨ I'm in my ${phase} phase (Day ${cycleDay}) on ZodiacCycle!\n☀️ ${userData.sun_sign || ''} Sun · 🌙 ${userData.moon_sign || ''} Moon\n⚡ Energy: ${energy} · 💭 Mood: ${mood}\n\nTrack your cycle with astrology 🌙\nzodiaccycle.app`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'My ZodiacCycle Stats ✨', text, url: 'https://zodiaccycle.app' });
+        setShared(true);
+        setTimeout(() => setShared(false), 2000);
+      } catch {}
+    } else {
+      await navigator.clipboard.writeText(text + '\nhttps://zodiaccycle.app');
+      setShared(true);
+      setTimeout(() => setShared(false), 2000);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="glass-heavy w-full max-w-lg rounded-t-3xl p-6 border-t border-white/40 space-y-5"
+        onClick={e => e.stopPropagation()}>
+        <div className="w-12 h-1.5 rounded-full bg-border/50 mx-auto"/>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold">Share Your Cosmic Stats ✨</h3>
+          <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-xl"><X className="w-5 h-5 text-muted-foreground"/></button>
+        </div>
+
+        {/* Preview card */}
+        <div className={`rounded-3xl p-6 bg-gradient-to-br ${phaseGradient} text-white space-y-4`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-widest opacity-80">ZodiacCycle</p>
+              <p className="text-2xl font-bold mt-1">{phaseEmoji} {phase} Phase</p>
+              <p className="text-sm opacity-80">Day {cycleDay} of my cycle</p>
+            </div>
+            <div className="text-5xl">{phaseEmoji}</div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { label: 'Sun', value: userData.sun_sign || '—', icon: '☀️' },
+              { label: 'Moon', value: userData.moon_sign || '—', icon: '🌙' },
+              { label: 'Rising', value: userData.rising_sign || '—', icon: '⬆️' },
+            ].map(s => (
+              <div key={s.label} className="rounded-2xl p-2.5 text-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
+                <p className="text-base">{s.icon}</p>
+                <p className="text-[9px] uppercase tracking-wide opacity-70">{s.label}</p>
+                <p className="text-xs font-bold mt-0.5">{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: 'Energy', value: energy },
+              { label: 'Mood', value: mood },
+            ].map(s => (
+              <div key={s.label} className="rounded-2xl px-3 py-2 text-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
+                <p className="text-[9px] uppercase tracking-wide opacity-70">{s.label}</p>
+                <p className="text-sm font-bold mt-0.5">{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-xs text-center opacity-70">zodiaccycle.app</p>
+        </div>
+
+        {/* Share buttons */}
+        <button onClick={handleShare}
+          className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold flex items-center justify-center gap-2">
+          {shared ? <><Check className="w-4 h-4"/> Copied!</> : '✨ Share My Stats'}
+        </button>
+
+        <button
+          onClick={() => {
+            navigator.clipboard.writeText('https://zodiaccycle.app');
+            setShared(true);
+            setTimeout(() => setShared(false), 2000);
+          }}
+          className="w-full py-3 rounded-2xl glass border border-white/30 text-sm font-semibold text-muted-foreground flex items-center justify-center gap-2">
+          🔗 Copy App Link
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ─── MAIN PROFILE TAB ─────────────────────────────────────────────────────────
@@ -539,6 +643,7 @@ export function ProfileTab() {
   
   );
 const [showInstallGuide, setShowInstallGuide] = useState(false);
+const [showShareCard, setShowShareCard] = useState(false);
   const saveAvatar = (a: string) => {
     setAvatar(a);
     localStorage.setItem('zodiac_avatar', a);
@@ -679,6 +784,12 @@ const [showInstallGuide, setShowInstallGuide] = useState(false);
   sub: 'Install ZodiacCycle as an app',
   action: () => setShowInstallGuide(true),
 },
+{
+  icon: <Star className="w-4 h-4 text-primary"/>,
+  label: 'Share ZodiacCycle ✨',
+  sub: 'Share your cosmic stats with friends',
+  action: () => setShowShareCard(true),
+},
           {
   icon: <Shield className="w-4 h-4 text-primary"/>,
   label: t('profile.privacy'),
@@ -734,6 +845,9 @@ const [showInstallGuide, setShowInstallGuide] = useState(false);
       <p className="text-center text-xs text-muted-foreground pb-2">{t('profile.version')}</p>
       {showInstallGuide && (
   <InstallAppGuide onClose={() => setShowInstallGuide(false)}/>
+)}
+{showShareCard && (
+  <ShareCard onClose={() => setShowShareCard(false)}/>
 )}
       {/* Modals */}
       {showAvatarPicker && (

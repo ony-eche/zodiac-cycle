@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'icons/*.png'],
       manifest: {
         name: 'ZodiacCycle',
         short_name: 'ZodiacCycle',
@@ -22,31 +22,30 @@ export default defineConfig({
         scope: '/',
         start_url: '/',
         icons: [
-       {
-        src: 'icons/icon-96x96.png',
-        sizes: '96x96',
-        type: 'image/png'
-       },
-       {
-        src: 'icons/icon-192x192.png',
-    sizes: '192x192',
-    type: 'image/png',
-    purpose: 'any maskable'
-  },
-  {
-    src: 'icons/icon-512x512.png',
-    sizes: '512x512',
-    type: 'image/png',
-    purpose: 'any maskable'
-  }
-   ] 
+          {
+            src: 'icons/icon-96x96.png',
+            sizes: '96x96',
+            type: 'image/png'
+          },
+          {
+            src: 'icons/icon-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable'
+          },
+          {
+            src: 'icons/icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
+          }
+        ]
       },
       workbox: {
         skipWaiting: true,
-        clientsClaim: true, 
-  globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-  navigateFallback: null,
-  importScripts: ['/sw-push.js'],
+        clientsClaim: true,
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallback: null,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/owmmrkowqkjbrimazftv\.supabase\.co\/.*/i,
@@ -75,18 +74,18 @@ export default defineConfig({
     })
   ],
   build: {
-  rollupOptions: {
-    output: {
-      manualChunks: {
-        'vendor-react': ['react', 'react-dom'],
-        'vendor-router': ['react-router'],
-        'vendor-stripe': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
-        'vendor-supabase': ['@supabase/supabase-js'],
-        'vendor-i18n': ['i18next', 'react-i18next'],
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-router': ['react-router'],
+          'vendor-stripe': ['@stripe/stripe-js', '@stripe/react-stripe-js'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-i18n': ['i18next', 'react-i18next'],
+        }
       }
     }
-  }
-},
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
