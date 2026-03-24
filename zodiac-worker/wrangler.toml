@@ -12,5 +12,5 @@ crons = [
 ]
 
 [vars]
-ALLOWED_ORIGIN = "http://localhost:5174"
+ALLOWED_ORIGIN = "https://zodiaccycle.app"
 SUPABASE_URL = "https://owmmrkowqkjbrimazftv.supabase.co"

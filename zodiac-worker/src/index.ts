@@ -337,28 +337,50 @@ async function generateInsightPreview(env: any, user: any, cycleDay: number, pha
   }
 }
 async function runMiddayCron(env: any): Promise<void> {
-  console.log('Midday cron starting');
+  console.log('=== Midday cron starting ===');
   try {
     const res = await fetch(
       `${env.SUPABASE_URL}/rest/v1/profiles?select=id,email,name,sun_sign,moon_sign,last_period_start,notif_push,notif_email,has_paid`,
       { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
     );
-    if (!res.ok) return;
+    if (!res.ok) {
+      console.error('Failed to fetch users:', res.status);
+      return;
+    }
     const users = await res.json() as any[];
+    console.log(`Found ${users.length} users for midday cron`);
 
     for (const user of users) {
-      if (!user.email) continue;
+      console.log(`Processing user ${user.id}: notif_push=${user.notif_push}, email=${user.email}`);
+      
+      if (!user.email) {
+        console.log(`  Skipping - no email`);
+        continue;
+      }
+      
       const cycleDay = getCycleDayForUser(user);
       const phase = getCyclePhase(cycleDay);
       const { title, body } = getMidnayNotification(user, cycleDay, phase);
+      
+      console.log(`  Generated notification: "${title}"`);
 
       if (user.notif_push) {
         const subs = await getUserSubs(env, user.id);
-        if (subs.length > 0) await sendPush(env, subs, title, body, '/');
+        console.log(`  Found ${subs.length} push subscriptions`);
+        if (subs.length > 0) {
+          await sendPush(env, subs, title, body, '/');
+          console.log(`  ✅ Push sent to ${user.id}`);
+        } else {
+          console.log(`  ⚠️ No push subscriptions found`);
+        }
+      } else {
+        console.log(`  ⏭️ Push notifications disabled for user`);
       }
     }
-    console.log('Midday cron done');
-  } catch (err) { console.error('Midday cron error:', err); }
+    console.log('Midday cron completed');
+  } catch (err) {
+    console.error('Midday cron error:', err);
+  }
 }
 
 async function runEveningCron(env: any): Promise<void> {
@@ -556,9 +578,15 @@ async function runDailyCron(env: any): Promise<void> {
 
     for (const user of users) {
       if (!user.email) continue;
+      
+      console.log(`\n📱 Processing user: ${user.email}`);
+      console.log(`   - has_paid: ${user.has_paid}`);
+      console.log(`   - notif_push: ${user.notif_push}`);
+      console.log(`   - last_period_start: ${user.last_period_start}`);
+      
       const isPremium = user.has_paid === true;
       const hasPeriodData = !!user.last_period_start;
-
+      
       let cycleDay = 14;
       let daysUntilNext = 14;
       let currentPhase = 'Luteal';
@@ -573,81 +601,134 @@ async function runDailyCron(env: any): Promise<void> {
         daysUntilNext = cycleLength - (daysSince % cycleLength);
         currentPhase = getCyclePhase(cycleDay);
         previousPhase = getPreviousCyclePhase(cycleDay);
+        
+        console.log(`   - daysSince: ${daysSince}`);
+        console.log(`   - cycleDay: ${cycleDay}`);
+        console.log(`   - daysUntilNext: ${daysUntilNext}`);
+        console.log(`   - currentPhase: ${currentPhase}`);
+        console.log(`   - previousPhase: ${previousPhase}`);
+      } else {
+        console.log(`   - ⚠️ No period data!`);
       }
 
-      let subs: any[] = [];
-      if (user.notif_push) {
-        subs = await getUserSubs(env, user.id);
-      }
-
-      // Period reminder
+      console.log(`\n   📋 Checking notifications:`);
+      
+      // Period reminder check
       if (user.notif_period_reminder && hasPeriodData && daysUntilNext === 3) {
+        console.log(`   ✅ Would send PERIOD REMINDER`);
+        
         if (user.notif_email) {
           await sendEmail(env, user.email, '🔴 Your period is coming in 3 days',
             periodReminderEmail(user.name, 3, currentPhase, user.sun_sign || 'Unknown'));
         }
-        if (user.notif_push && subs.length > 0) {
-          await sendPush(env, subs, '🔴 Period reminder', 'Your period is expected in 3 days', '/');
+        if (user.notif_push) {
+          const subs = await getUserSubs(env, user.id);
+          if (subs.length > 0) {
+            await sendPush(env, subs, '🔴 Period reminder', 'Your period is expected in 3 days', '/');
+          }
         }
+      } else if (user.notif_period_reminder && hasPeriodData) {
+        console.log(`   ❌ Period reminder: daysUntilNext=${daysUntilNext} (need 3)`);
       }
-
-      // Ovulation alert
+      
+      // Ovulation check
       if (user.notif_ovulation && hasPeriodData && (cycleDay === 9 || cycleDay === 10)) {
+        console.log(`   ✅ Would send OVULATION ALERT`);
+        
         if (user.notif_email) {
           await sendEmail(env, user.email, '🌿 Your fertile window is starting',
             ovulationEmail(user.name, user.sun_sign || 'Unknown', user.moon_sign || 'Unknown'));
         }
-        if (user.notif_push && subs.length > 0) {
-          await sendPush(env, subs, '🌿 Fertile window', 'Your fertile window is starting today', '/');
+        if (user.notif_push) {
+          const subs = await getUserSubs(env, user.id);
+          if (subs.length > 0) {
+            await sendPush(env, subs, '🌿 Fertile window', 'Your fertile window is starting today', '/');
+          }
         }
+      } else if (user.notif_ovulation && hasPeriodData) {
+        console.log(`   ❌ Ovulation: cycleDay=${cycleDay} (need 9 or 10)`);
       }
-
-      // Phase change (premium only)
+      
+      // Phase change check
       if (isPremium && user.notif_phase_change && hasPeriodData && currentPhase !== previousPhase) {
+        console.log(`   ✅ Would send PHASE CHANGE (${previousPhase} → ${currentPhase})`);
+        
         const tip = PHASE_TIPS[currentPhase] || '';
         if (user.notif_email) {
           await sendEmail(env, user.email, `✨ You've entered your ${currentPhase} Phase`,
             phaseChangeEmail(user.name, currentPhase, user.sun_sign || 'Unknown', tip));
         }
-        if (user.notif_push && subs.length > 0) {
-          const phaseEmojis: Record<string, string> = { Menstrual: '🔴', Follicular: '🌸', Ovulation: '⭐', Luteal: '🌙' };
-          await sendPush(env, subs, `${phaseEmojis[currentPhase] || '✨'} New phase: ${currentPhase}`, tip.slice(0, 80), '/');
+        if (user.notif_push) {
+          const subs = await getUserSubs(env, user.id);
+          if (subs.length > 0) {
+            const phaseEmojis: Record<string, string> = { Menstrual: '🔴', Follicular: '🌸', Ovulation: '⭐', Luteal: '🌙' };
+            await sendPush(env, subs, `${phaseEmojis[currentPhase] || '✨'} New phase: ${currentPhase}`, tip.slice(0, 80), '/');
+          }
         }
+      } else if (isPremium && user.notif_phase_change && hasPeriodData) {
+        console.log(`   ❌ Phase change: phases are same (${currentPhase})`);
+      } else if (!isPremium) {
+        console.log(`   ❌ Phase change: requires premium (has_paid=false)`);
       }
-
+      
       // Daily insight (premium only)
       if (isPremium && user.notif_daily_insights) {
-        const preview = await generateInsightPreview(env, user, cycleDay, currentPhase);
-        if (user.notif_email) {
-          await sendEmail(env, user.email,
-            `✨ Your cosmic insight for today, ${user.name || 'Starlighter'}`,
-            dailyInsightEmail(user.name, currentPhase, cycleDay, user.sun_sign || 'Unknown', preview));
+        console.log(`   🔮 Generating daily insight for ${user.email}`);
+        
+        try {
+          const preview = await generateInsightPreview(env, user, cycleDay, currentPhase);
+          console.log(`   📝 Insight generated: "${preview.substring(0, 50)}..."`);
+          
+          if (user.notif_email) {
+            console.log(`   📧 Attempting to send email to ${user.email}`);
+            await sendEmail(env, user.email,
+              `✨ Your cosmic insight for today, ${user.name || 'Starlighter'}`,
+              dailyInsightEmail(user.name, currentPhase, cycleDay, user.sun_sign || 'Unknown', preview));
+            console.log(`   ✅ Email sent`);
+          }
+          
+          if (user.notif_push) {
+            console.log(`   📱 Attempting to send push notification`);
+            const subs = await getUserSubs(env, user.id);
+            console.log(`   📱 Found ${subs.length} push subscriptions`);
+            
+            if (subs.length > 0) {
+              await sendPush(env, subs, '🔮 Your daily cosmic insight', preview.slice(0, 100), '/');
+              console.log(`   ✅ Push notification sent!`);
+            } else {
+              console.log(`   ⚠️ No push subscriptions found for user ${user.id}`);
+            }
+          }
+        } catch (error) {
+          console.error(`   ❌ Error sending daily insight:`, error);
         }
-        if (user.notif_push && subs.length > 0) {
-          await sendPush(env, subs, '🔮 Your daily cosmic insight', preview.slice(0, 100), '/');
-        }
+      } else if (isPremium) {
+        console.log(`   ❌ Daily insight: notif_daily_insights is false`);
+      } else {
+        console.log(`   ❌ Daily insight: requires premium (has_paid=false)`);
       }
-    }
+    } // ← This closes the for loop
+    
     console.log('Cron completed successfully');
   } catch (err) {
     console.error('Cron error:', err);
   }
-}
+} // ← This closes the runDailyCron function
 
 // ─── Main worker ──────────────────────────────────────────────────────────────
 export default {
   async scheduled(event: any, env: any, _ctx: any): Promise<void> {
-  const cron = event.cron;
-  console.log('Cron triggered:', cron);
+    const cron = event.cron;
+    console.log('Cron triggered:', cron);
 
-  if (cron === '0 8 * * *')  await runDailyCron(env);
-  if (cron === '0 12 * * *') await runMiddayCron(env);
-  if (cron === '0 18 * * *') await runEveningCron(env);
-  if (cron === '0 21 * * *') await runNightCron(env);
-  if (cron === '0 8 * * 1')  await runWeeklyCron(env);
-},
+    if (cron === '0 8 * * *') await runDailyCron(env);
+    if (cron === '0 12 * * *') await runMiddayCron(env);
+    if (cron === '0 18 * * *') await runEveningCron(env);
+    if (cron === '0 21 * * *') await runNightCron(env);
+    if (cron === '0 8 * * 1') await runWeeklyCron(env);
+  },
 
-  async fetch(request: Request, env: any): Promise<Response> { 
+  async fetch(request: Request, env: any): Promise<Response> {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -672,8 +753,8 @@ export default {
         const dt = new Date(datetime);
         const [lat, lng] = coordinates.split(',').map(Number);
         const chart = calcChart(
-          dt.getUTCFullYear(), dt.getUTCMonth()+1, dt.getUTCDate(),
-          dt.getUTCHours() + dt.getUTCMinutes()/60, lat, lng
+          dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate(),
+          dt.getUTCHours() + dt.getUTCMinutes() / 60, lat, lng
         );
         return new Response(JSON.stringify({ status: 'ok', data: chart }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -684,7 +765,7 @@ export default {
         });
       }
     }
-    
+
     // ── Claude AI ──────────────────────────────────────────────────────────
     if (path === '/ai/predict' && request.method === 'POST') {
       try {
@@ -831,57 +912,73 @@ export default {
         });
       }
     }
-if (path === '/cron/midday' && request.method === 'POST') {
-  try {
-    await runMiddayCron(env);
-    return new Response(JSON.stringify({ ok: true, message: 'Midday cron ran' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-}
 
-if (path === '/cron/evening' && request.method === 'POST') {
-  try {
-    await runEveningCron(env);
-    return new Response(JSON.stringify({ ok: true, message: 'Evening cron ran' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-}
+    if (path === '/cron/midday' && request.method === 'POST') {
+      try {
+        await runMiddayCron(env);
+        return new Response(JSON.stringify({ ok: true, message: 'Midday cron ran' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
-if (path === '/cron/night' && request.method === 'POST') {
-  try {
-    await runNightCron(env);
-    return new Response(JSON.stringify({ ok: true, message: 'Night cron ran' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-}
+    if (path === '/cron/evening' && request.method === 'POST') {
+      try {
+        await runEveningCron(env);
+        return new Response(JSON.stringify({ ok: true, message: 'Evening cron ran' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
 
-if (path === '/cron/weekly' && request.method === 'POST') {
-  try {
-    await runWeeklyCron(env);
-    return new Response(JSON.stringify({ ok: true, message: 'Weekly cron ran' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-}
+    if (path === '/cron/night' && request.method === 'POST') {
+      try {
+        await runNightCron(env);
+        return new Response(JSON.stringify({ ok: true, message: 'Night cron ran' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    if (path === '/cron/weekly' && request.method === 'POST') {
+      try {
+        await runWeeklyCron(env);
+        return new Response(JSON.stringify({ ok: true, message: 'Weekly cron ran' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // ── Test cron manually ─────────────────────────────────────────────────
+    if (path === '/cron/test' && request.method === 'POST') {
+      try {
+        await runDailyCron(env);
+        return new Response(JSON.stringify({ ok: true, message: 'Cron ran successfully' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // ── Stripe: Create payment intent ──────────────────────────────────────
     if (path === '/stripe/create-payment-intent' && request.method === 'POST') {
       try {
@@ -967,23 +1064,71 @@ if (path === '/cron/weekly' && request.method === 'POST') {
         supabase_url_set: !!env.SUPABASE_URL,
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-
-   // ── Test cron manually ─────────────────────────────────────────────────
-    if (path === '/cron/test' && request.method === 'POST') {
-      try {
-        await runDailyCron(env);
-        return new Response(JSON.stringify({ ok: true, message: 'Cron ran successfully' }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: String(err) }), {
-          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+if (path === '/test-push' && request.method === 'POST') {
+  try {
+    // First, get the raw text to debug
+    const rawBody = await request.text();
+    console.log('Raw request body:', rawBody);
+    
+    // If empty body, return error
+    if (!rawBody) {
+      return new Response(JSON.stringify({ error: 'Empty request body' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
-
+    
+    // Try to parse JSON
+    let body;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      return new Response(JSON.stringify({ 
+        error: 'Invalid JSON', 
+        received: rawBody,
+        suggestion: 'Use format: {"userId":"...", "title":"...", "body":"..."}'
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const { userId, title, body: messageBody } = body;
+    console.log(`Test push requested for user: ${userId}`);
+    
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Missing userId' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const subs = await getUserSubs(env, userId);
+    console.log(`Found ${subs.length} push subscriptions`);
+    
+    if (subs.length === 0) {
+      return new Response(JSON.stringify({ error: 'No push subscriptions found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    await sendPush(env, subs, title || 'Test Notification', messageBody || 'This is a test push!', '/');
+    
+    return new Response(JSON.stringify({ ok: true, message: `Push sent to ${subs.length} devices` }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    console.error('Test push error:', err);
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}
     return new Response(JSON.stringify({ error: 'Not found' }), {
       status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   },
-}; 
+};
