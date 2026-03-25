@@ -330,9 +330,11 @@ function FullCalendar({ month, cycleInfo, editMode, onDayTap, onPrevMonth, onNex
   const handleTap = (day: Date) => {
     if (tapping.current) return;
     tapping.current = true;
-    setTappedDay(format(day, 'yyyy-MM-dd'));
+    // ✅ Create a clean date without time component to fix off-by-one issue
+    const cleanDate = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    setTappedDay(format(cleanDate, 'yyyy-MM-dd'));
     setTimeout(() => { setTappedDay(null); tapping.current = false; }, 300);
-    onDayTap(day);
+    onDayTap(cleanDate);
   };
 
   return (
@@ -406,7 +408,7 @@ export function CycleTab() {
     try { return JSON.parse(localStorage.getItem('zodiac_day_logs') || '{}'); } catch { return {}; }
   });
 
-  // ✅ FIXED: Initialize periods from userData with proper string handling
+  // Initialize periods from userData with proper string handling
   const [periods, setPeriods] = useState<PeriodEntry[]>(() => {
     try {
       const s = localStorage.getItem('zodiac_periods');
@@ -414,7 +416,6 @@ export function CycleTab() {
         const parsed = JSON.parse(s);
         return parsed.map((p: any) => ({ ...p, id: p.id || generateId() }));
       }
-      // ✅ Handle string dates from userData (no Date conversion)
       if (userData.lastPeriodStart) {
         const startStr = typeof userData.lastPeriodStart === 'string' 
           ? userData.lastPeriodStart 
@@ -426,7 +427,6 @@ export function CycleTab() {
             ? userData.lastPeriodEnd
             : format(new Date(userData.lastPeriodEnd), 'yyyy-MM-dd');
         } else {
-          // Default 4 day period
           const startDate = new Date(startStr);
           endStr = format(addDays(startDate, 4), 'yyyy-MM-dd');
         }
@@ -444,46 +444,52 @@ export function CycleTab() {
   const savePeriods = (p: PeriodEntry[]) => { 
     setPeriods(p); 
     localStorage.setItem('zodiac_periods', JSON.stringify(p));
-    // ✅ Sync to UserDataContext as strings
-    if (p.length > 0) {
-      const lastPeriod = p.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())[0];
-      // This would need to be connected to updateUserData - you may want to add this
-    }
   };
   const saveLogs = (l: Record<string, DayLog>) => { setLogs(l); localStorage.setItem('zodiac_day_logs', JSON.stringify(l)); };
 
   const cycleInfo = useMemo(() => calculateCycleInfo(periods), [periods]);
   const phase = PHASE_INSIGHTS[cycleInfo.phase] || PHASE_INSIGHTS.unknown;
   const daysToNext = Math.max(0, differenceInDays(cycleInfo.nextPeriod, new Date()));
+  
+  // Calculate fertile window text
+  const getFertileWindowText = () => {
+    if (cycleInfo.phase === 'ovulation') return 'Now! ⭐';
+    if (cycleInfo.phase === 'follicular') return 'Soon 🌸';
+    if (cycleInfo.phase === 'luteal') return 'Next cycle';
+    return '—';
+  };
 
   const handleDayTap = useCallback((day: Date) => {
+    // Create a clean date at midnight to avoid timezone shifting
+    const normalizedDay = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    
     if (!editMode) {
-      setSelectedDate(day);
+      setSelectedDate(normalizedDay);
       if (showFullCalendar) setShowFullCalendar(false);
       setShowLogModal(true);
       return;
     }
-    const dateStr = format(day, 'yyyy-MM-dd');
+    const dateStr = format(normalizedDay, 'yyyy-MM-dd');
     const existingIdx = periods.findIndex(p => {
       const start = new Date(p.start);
       const end = p.end ? new Date(p.end) : start;
-      return day >= start && day <= end;
+      return normalizedDay >= start && normalizedDay <= end;
     });
     if (existingIdx >= 0) {
       const p = periods[existingIdx];
       const pStart = new Date(p.start);
       const pEnd = new Date(p.end || p.start);
-      if (isSameDay(day, pStart) && isSameDay(day, pEnd)) {
+      if (isSameDay(normalizedDay, pStart) && isSameDay(normalizedDay, pEnd)) {
         savePeriods(periods.filter((_, i) => i !== existingIdx));
-      } else if (isSameDay(day, pStart)) {
+      } else if (isSameDay(normalizedDay, pStart)) {
         const np = [...periods]; np[existingIdx] = { ...p, start: format(addDays(pStart, 1), 'yyyy-MM-dd') }; savePeriods(np);
-      } else if (isSameDay(day, pEnd)) {
+      } else if (isSameDay(normalizedDay, pEnd)) {
         const np = [...periods]; np[existingIdx] = { ...p, end: format(addDays(pEnd, -1), 'yyyy-MM-dd') }; savePeriods(np);
       } else {
         const np = [...periods];
         np.splice(existingIdx, 1,
-          { id: generateId(), start: p.start, end: format(addDays(day, -1), 'yyyy-MM-dd') },
-          { id: generateId(), start: format(addDays(day, 1), 'yyyy-MM-dd'), end: p.end }
+          { id: generateId(), start: p.start, end: format(addDays(normalizedDay, -1), 'yyyy-MM-dd') },
+          { id: generateId(), start: format(addDays(normalizedDay, 1), 'yyyy-MM-dd'), end: p.end }
         );
         savePeriods(np);
       }
@@ -491,12 +497,12 @@ export function CycleTab() {
       const nearby = periods.find(p => {
         const pEnd = new Date(p.end || p.start);
         const pStart = new Date(p.start);
-        return differenceInDays(day, pEnd) === 1 || differenceInDays(pStart, day) === 1;
+        return differenceInDays(normalizedDay, pEnd) === 1 || differenceInDays(pStart, normalizedDay) === 1;
       });
       if (nearby) {
         const pEnd = new Date(nearby.end || nearby.start);
         savePeriods(periods.map(p => p.id === nearby.id
-          ? differenceInDays(day, pEnd) === 1 ? { ...p, end: dateStr } : { ...p, start: dateStr }
+          ? differenceInDays(normalizedDay, pEnd) === 1 ? { ...p, end: dateStr } : { ...p, start: dateStr }
           : p
         ));
       } else {
@@ -513,7 +519,7 @@ export function CycleTab() {
   const weekStart = startOfWeek(new Date());
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  // ✅ KID-FRIENDLY PHASE EXPLANATIONS
+  // KID-FRIENDLY PHASE EXPLANATIONS
   const getPhaseTitle = () => {
     switch (cycleInfo.phase) {
       case 'menstrual': return 'Your period is here — time to rest 🌙';
@@ -546,8 +552,8 @@ export function CycleTab() {
         what: 'You\'re at your peak! This is when you feel most confident, energetic, and magnetic. Your body is fertile right now.',
         tips: [
           { icon: '✨', text: 'You\'re glowing — own it!' },
-          { icon: '🗣️', text: 'Perfect time for important conversations' },
-          { icon: '💃', text: 'Energy is highest — dance, move, shine!' }
+          { icon: '🗣️', text: 'Perfect time for important conversations'},
+                      { icon: '💃', text: 'Energy is highest — dance, move, shine!' }
         ]
       };
       case 'luteal': return {
@@ -558,7 +564,7 @@ export function CycleTab() {
           { icon: '😴', text: 'Sleep more if you can — your body is working hard' }
         ]
       };
-           default: return {
+      default: return {
         what: 'Log your period dates to get personalized cycle insights',
         tips: [
           { icon: '📅', text: 'Tap the calendar to log your period' },
@@ -570,42 +576,42 @@ export function CycleTab() {
   };
 
   const phaseExplanation = getPhaseExplanation();
-  const heroLabel = `${getPhaseTitle()} · Day ${cycleInfo.cycleDay}`;
+  const phaseTitle = getPhaseTitle();
 
   return (
     <div className="pb-28">
 
-      {/* ── Hero banner ── */}
+      {/* ── Hero banner (SIMPLIFIED - no duplicate explanation) ── */}
       <div style={{ background: `linear-gradient(160deg, ${phase.gradientFrom}, ${phase.gradientTo})` }}
-        className="px-5 pt-6 pb-8 -mx-0 mb-0">
-        <div className="flex items-start justify-between mb-1">
+        className="px-5 pt-6 pb-6 -mx-0 mb-0">
+        <div className="flex items-start justify-between mb-2">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest opacity-80" style={{ color: phase.textColor }}>
               {format(new Date(), 'EEEE, MMMM d')}
             </p>
-            <p className="text-2xl font-bold mt-1" style={{ color: phase.textColor }}>{heroLabel}</p>
-            <p className="text-sm opacity-80 mt-1" style={{ color: phase.textColor }}>{phaseExplanation.what}</p>
+            <p className="text-xl font-bold mt-1" style={{ color: phase.textColor }}>
+              {phaseTitle} · Day {cycleInfo.cycleDay}
+            </p>
           </div>
-          <div className="text-5xl ml-3 mt-1">{phase.emoji}</div>
+          <div className="text-4xl ml-3 mt-1">{phase.emoji}</div>
         </div>
 
-        {/* Stats row */}
-        <div className="flex gap-3 mt-4">
+        {/* Simple stats row - just the basics */}
+        <div className="flex gap-3 mt-3">
           {[
-            { label: 'Energy Level', value: cycleInfo.phase === 'menstrual' ? 'Low - Rest up' : cycleInfo.phase === 'follicular' ? 'Rising 🌱' : cycleInfo.phase === 'ovulation' ? 'Peak ⚡' : 'Winding down 🌙' },
-            { label: 'Mood', value: cycleInfo.phase === 'menstrual' ? 'Quiet & Reflective' : cycleInfo.phase === 'follicular' ? 'Optimistic 😊' : cycleInfo.phase === 'ovulation' ? 'Confident 🦋' : 'Calm & Cozy' },
-            { label: 'Period in', value: daysToNext > 0 ? `${daysToNext} day${daysToNext !== 1 ? 's' : ''}` : 'Today' },
+            { label: 'Next period', value: daysToNext > 0 ? `in ${daysToNext} days` : 'Today' },
+            { label: 'Fertile window', value: getFertileWindowText() },
           ].map(s => (
-            <div key={s.label} className="flex-1 rounded-2xl px-3 py-2.5 text-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
+            <div key={s.label} className="flex-1 rounded-2xl px-3 py-2 text-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
               <p className="text-[9px] uppercase tracking-wide opacity-70" style={{ color: phase.textColor }}>{s.label}</p>
               <p className="text-xs font-bold mt-0.5" style={{ color: phase.textColor }}>{s.value}</p>
             </div>
           ))}
         </div>
 
-        {/* Moon sign */}
+        {/* Moon sign - small */}
         {userData.moon_sign && (
-          <p className="text-xs mt-3 opacity-70" style={{ color: phase.textColor }}>
+          <p className="text-xs mt-2 opacity-70 text-center" style={{ color: phase.textColor }}>
             🌙 {userData.moon_sign} Moon · {cycleInfo.accuracy}% accurate
           </p>
         )}
@@ -713,7 +719,7 @@ export function CycleTab() {
         </div>
       )}
 
-      {/* ── Scrollable content ── */}
+      {/* ── Scrollable content (ONLY ONE detailed explanation card) ── */}
       <div className="px-4 pt-4">
         {/* Today's log card */}
         <div className="rounded-3xl bg-white border border-rose-100 shadow-sm p-4 mb-4">
@@ -747,7 +753,7 @@ export function CycleTab() {
           )}
         </div>
 
-        {/* ── KID-FRIENDLY PHASE CARD ── */}
+        {/* ── DETAILED PHASE CARD (ONLY ONE COPY) ── */}
         {cycleInfo.phase !== 'unknown' && (
           <div className="rounded-3xl mb-4 overflow-hidden"
             style={{ background: `linear-gradient(135deg, ${phase.gradientFrom}15, ${phase.gradientTo}08)`, border: `1px solid ${phase.gradientFrom}30` }}>
@@ -755,11 +761,11 @@ export function CycleTab() {
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-2xl">{phase.emoji}</span>
                 <p className="font-bold text-gray-800 text-base">
-                  {getPhaseTitle()}
+                  {phaseTitle}
                 </p>
               </div>
               
-              {/* Simple explanation */}
+              {/* What's happening explanation */}
               <div className="space-y-3 mb-4">
                 <p className="text-sm text-gray-700 leading-relaxed bg-white/60 rounded-2xl p-3">
                   {phaseExplanation.what}
