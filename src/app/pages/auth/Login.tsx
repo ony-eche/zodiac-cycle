@@ -185,9 +185,13 @@ export function Login() {
             }
           </Button>
 
+          {/* ✅ FIXED: Create Account button now goes to Welcome page */}
           <p className="text-center text-sm text-muted-foreground">
             {t('auth.login.signup')}{' '}
-            <button onClick={() => navigate('/signup')} className="text-primary font-medium hover:underline">
+            <button 
+              onClick={() => navigate('/onboarding/welcome')} 
+              className="text-primary font-medium hover:underline"
+            >
               {t('auth.signup.button')}
             </button>
           </p>
