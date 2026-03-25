@@ -11,7 +11,7 @@ import { useUserData } from '../../context/UserDataContext';
 export function SignUp() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { userData, updateUserData } = useUserData();
+  const { userData, updateUserData, syncToSupabase } = useUserData();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -47,63 +47,74 @@ export function SignUp() {
     setError('');
 
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
-      if (signUpError) { setError(signUpError.message); setLoading(false); return; }
-
-      updateUserData({ email });
-
-      if (data.user) {
-        const { error: upsertError } = await supabase
-          .from('profiles')
-          .upsert({
-            id: data.user.id,
-            email,
+      const { data, error: signUpError } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          data: {
             name: userData.name,
-            date_of_birth: userData.dateOfBirth?.toISOString(),
+            date_of_birth: userData.dateOfBirth,
             time_of_birth: userData.timeOfBirth,
             place_of_birth: userData.placeOfBirth,
             birth_lat: userData.birth_lat,
             birth_lng: userData.birth_lng,
-            sun_sign: userData.sun_sign,
-            moon_sign: userData.moon_sign,
-            rising_sign: userData.rising_sign,
-            venus_sign: userData.venus_sign,
-            mars_sign: userData.mars_sign,
-            mercury_sign: userData.mercury_sign,
-            jupiter_sign: userData.jupiter_sign,
-            saturn_sign: userData.saturn_sign,
             current_city: userData.currentCity,
             current_lat: userData.current_lat,
             current_lng: userData.current_lng,
-            country_code: userData.country_code,
-            currency: userData.currency,
+            has_paid: userData.hasPaid,
             stripe_customer_id: userData.stripe_customer_id,
-            tracks_periods: userData.tracksPeriods,
-            last_period_start: userData.lastPeriodStart?.toISOString(),
-            last_period_end: userData.lastPeriodEnd?.toISOString(),
-            has_paid: userData.hasPaid ?? false,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
+          }
+        }
+      });
+      
+      if (signUpError) { 
+        setError(signUpError.message); 
+        setLoading(false); 
+        return; 
+      }
 
-        if (upsertError) console.error('Profile sync error:', upsertError);
+      updateUserData({ email });
 
+      if (data.user) {
+        // Sync all onboarding data to Supabase
+        await syncToSupabase();
+        
+        // Update customer email in Stripe if needed
         if (userData.stripe_customer_id) {
-          await fetch(`${import.meta.env.VITE_WORKER_URL}/stripe/update-customer`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customerId: userData.stripe_customer_id, email }),
-          });
+          try {
+            await fetch(`${import.meta.env.VITE_WORKER_URL}/stripe/update-customer`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ customerId: userData.stripe_customer_id, email }),
+            });
+          } catch (err) {
+            console.error('Stripe update error:', err);
+          }
+        }
+        
+        // Check if email confirmation is required
+        if (data.user.confirmed_at) {
+          // Email already confirmed - check if profile has birth date
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('date_of_birth')
+            .eq('id', data.user.id)
+            .single();
+          
+          if (!profile?.date_of_birth) {
+            // User hasn't completed onboarding - go to welcome
+            navigate('/onboarding/welcome');
+          } else {
+            navigate('/dashboard');
+          }
+        } else {
+          // Email confirmation required - show confirmation screen
+          setConfirmationSent(true);
+          setLoading(false);
         }
       }
-
-      // Check if email confirmation is required
-      if (data.user && !data.user.confirmed_at) {
-        setConfirmationSent(true);
-        setLoading(false);
-      } else {
-        navigate('/dashboard');
-      }
     } catch (err) {
+      console.error('Signup error:', err);
       setError(t('common.error'));
       setLoading(false);
     }

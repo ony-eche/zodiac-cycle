@@ -1,4 +1,5 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { ZodiacCycleLogo } from '../components/ZodiacCycleLogo';
 import { Bell, Home, Droplet, Star, TrendingUp, MessageCircle, User } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -6,6 +7,7 @@ import { useUserData } from '../context/UserDataContext';
 import { generateNotifications } from '../../lib/notifications';
 import { NotificationDropdown } from '../components/NotificationDropdown';
 import InstallPrompt from '../components/InstallPrompt';
+import { supabase } from '../../lib/supabase';
 
 const HomeTab     = lazy(() => import('./HomeTab').then(m => ({ default: m.HomeTab })));
 const ChartTab    = lazy(() => import('./ChartTab').then(m => ({ default: m.ChartTab })));
@@ -25,13 +27,68 @@ function TabLoader() {
 }
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const { userData } = useUserData();
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(true);
+
+  // Check if user has completed onboarding
+  useEffect(() => {
+    const checkProfile = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          navigate('/login');
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('date_of_birth')
+          .eq('id', user.id)
+          .single();
+
+        // If user doesn't have a birth date, redirect to onboarding
+        if (!profile?.date_of_birth) {
+          console.log('User has incomplete profile, redirecting to onboarding');
+          navigate('/onboarding/welcome');
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking profile:', error);
+      } finally {
+        setCheckingProfile(false);
+      }
+    };
+
+    checkProfile();
+  }, [navigate]);
+
+  // Show loading while checking profile
+  if (checkingProfile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ Convert string date to Date for the notifications function
+  const lastPeriodDate = userData.lastPeriodStart 
+    ? new Date(userData.lastPeriodStart) 
+    : undefined;
 
   const notifications = generateNotifications(
-    { lastPeriodStart: userData.lastPeriodStart, sun_sign: userData.sun_sign, moon_sign: userData.moon_sign },
+    { 
+      lastPeriodStart: lastPeriodDate,
+      sun_sign: userData.sun_sign, 
+      moon_sign: userData.moon_sign 
+    },
     t,
   );
   const unreadCount = notifications.filter(n => n.unread).length;

@@ -5,7 +5,9 @@ import {
   eachDayOfInterval, isSameDay, addMonths, subMonths, isToday,
   startOfWeek, endOfWeek, addWeeks, subWeeks,
 } from 'date-fns';
-import { X, Check, Trash2, Edit3, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
+import { X, Check, Trash2, Edit3, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { lazy, Suspense } from 'react';
 const AdBanner = lazy(() => import('../components/AdBanner').then(m => ({ default: m.AdBanner }))); 
@@ -317,81 +319,6 @@ function CycleHistory({ cycleInfo, onEdit }: { cycleInfo: any; onEdit: (p: Perio
   );
 }
 
-// ─── Full Month Calendar ──────────────────────────────────────────────────────
-function FullCalendar({ month, cycleInfo, editMode, onDayTap, onPrevMonth, onNextMonth }: {
-  month: Date; cycleInfo: any; editMode: boolean;
-  onDayTap: (day: Date) => void; onPrevMonth: () => void; onNextMonth: () => void;
-}) {
-  const days = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) });
-  const startPad = startOfMonth(month).getDay();
-  const tapping = useRef(false);
-  const [tappedDay, setTappedDay] = useState<string | null>(null);
-
-  const handleTap = (day: Date) => {
-    if (tapping.current) return;
-    tapping.current = true;
-    // ✅ Create a clean date without time component to fix off-by-one issue
-    const cleanDate = new Date(day.getFullYear(), day.getMonth(), day.getDate());
-    setTappedDay(format(cleanDate, 'yyyy-MM-dd'));
-    setTimeout(() => { setTappedDay(null); tapping.current = false; }, 300);
-    onDayTap(cleanDate);
-  };
-
-  return (
-    <div>
-      <div className="flex items-center justify-between px-4 py-2">
-        <button onClick={onPrevMonth} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-          <ChevronLeft className="w-4 h-4 text-gray-600" />
-        </button>
-        <p className="text-sm font-bold text-gray-700">{format(month, 'MMMM yyyy')}</p>
-        <button onClick={onNextMonth} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-          <ChevronRight className="w-4 h-4 text-gray-600" />
-        </button>
-      </div>
-      <div className="grid grid-cols-7 px-2">
-        {['S','M','T','W','T','F','S'].map((d, i) => (
-          <div key={i} className="text-center text-[10px] text-gray-400 font-semibold py-1">{d}</div>
-        ))}
-        {Array.from({ length: startPad }).map((_, i) => <div key={`p-${i}`} />)}
-        {days.map(day => {
-          const dateStr = format(day, 'yyyy-MM-dd');
-          const status = getDayStatus(day, cycleInfo);
-          const isToday_ = isToday(day);
-          const isTapped = tappedDay === dateStr;
-          const isPeriod = status === 'period';
-          const isPredicted = status === 'predicted';
-          const isFertile = status === 'fertile';
-          const isOvulation = status === 'ovulation';
-          return (
-            <div key={dateStr} className="flex flex-col items-center py-0.5">
-              <button onClick={() => handleTap(day)}
-                className="flex items-center justify-center rounded-full"
-                style={{
-                  width: 36, height: 36,
-                  transform: isTapped ? 'scale(0.85)' : 'scale(1)',
-                  transition: 'transform 0.1s ease',
-                  background: isPeriod ? '#f43f5e' : isOvulation ? '#14b8a6' : isFertile ? 'rgba(20,184,166,0.15)' : isPredicted ? 'rgba(244,63,94,0.08)' : isToday_ ? 'rgba(0,0,0,0.07)' : 'transparent',
-                  border: isToday_ && !isPeriod ? '2px solid #374151' : isPredicted && !isPeriod ? '1.5px dashed #f43f5e' : isFertile && !isPeriod && !isOvulation ? '1.5px solid rgba(20,184,166,0.5)' : 'none',
-                  boxShadow: isPeriod ? '0 2px 6px rgba(244,63,94,0.3)' : isOvulation ? '0 2px 6px rgba(20,184,166,0.3)' : 'none',
-                }}>
-                {isPeriod
-                  ? <Check strokeWidth={3} style={{ width: 14, height: 14, color: 'white' }} />
-                  : <span style={{
-                      fontSize: 13,
-                      fontWeight: isToday_ ? '800' : '400',
-                      color: isPeriod ? 'white' : isOvulation ? '#0f766e' : isFertile ? '#0d9488' : isPredicted ? '#f43f5e' : isToday_ ? '#111827' : '#6b7280',
-                    }}>{format(day, 'd')}</span>
-                }
-              </button>
-              {isToday_ && <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#374151', marginTop: 1 }} />}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export function CycleTab() {
   const { userData } = useUserData();
@@ -450,17 +377,9 @@ export function CycleTab() {
   const cycleInfo = useMemo(() => calculateCycleInfo(periods), [periods]);
   const phase = PHASE_INSIGHTS[cycleInfo.phase] || PHASE_INSIGHTS.unknown;
   const daysToNext = Math.max(0, differenceInDays(cycleInfo.nextPeriod, new Date()));
-  
-  // Calculate fertile window text
-  const getFertileWindowText = () => {
-    if (cycleInfo.phase === 'ovulation') return 'Now! ⭐';
-    if (cycleInfo.phase === 'follicular') return 'Soon 🌸';
-    if (cycleInfo.phase === 'luteal') return 'Next cycle';
-    return '—';
-  };
 
   const handleDayTap = useCallback((day: Date) => {
-    // Create a clean date at midnight to avoid timezone shifting
+    // Create a clean date at midnight to avoid timezone issues
     const normalizedDay = new Date(day.getFullYear(), day.getMonth(), day.getDate());
     
     if (!editMode) {
@@ -552,8 +471,8 @@ export function CycleTab() {
         what: 'You\'re at your peak! This is when you feel most confident, energetic, and magnetic. Your body is fertile right now.',
         tips: [
           { icon: '✨', text: 'You\'re glowing — own it!' },
-          { icon: '🗣️', text: 'Perfect time for important conversations'},
-                      { icon: '💃', text: 'Energy is highest — dance, move, shine!' }
+          { icon: '🗣️', text: 'Perfect time for important conversations' },
+          { icon: '💃', text: 'Energy is highest — dance, move, shine!' }
         ]
       };
       case 'luteal': return {
@@ -577,11 +496,30 @@ export function CycleTab() {
 
   const phaseExplanation = getPhaseExplanation();
   const phaseTitle = getPhaseTitle();
+  
+  // Custom calendar tile styling
+  const getTileClassName = ({ date, view }: { date: Date; view: string }) => {
+    if (view !== 'month') return '';
+    
+    const status = getDayStatus(date, cycleInfo);
+    
+    if (status === 'period') return 'period-day';
+    if (status === 'ovulation') return 'ovulation-day';
+    if (status === 'fertile') return 'fertile-day';
+    if (status === 'predicted') return 'predicted-day';
+    
+    return '';
+  };
+
+  const getTileContent = ({ date, view }: { date: Date; view: string }) => {
+    if (view !== 'month') return null;
+    return null;
+  };
 
   return (
     <div className="pb-28">
 
-      {/* ── Hero banner (SIMPLIFIED - no duplicate explanation) ── */}
+      {/* ── Hero banner (SIMPLIFIED) ── */}
       <div style={{ background: `linear-gradient(160deg, ${phase.gradientFrom}, ${phase.gradientTo})` }}
         className="px-5 pt-6 pb-6 -mx-0 mb-0">
         <div className="flex items-start justify-between mb-2">
@@ -596,11 +534,13 @@ export function CycleTab() {
           <div className="text-4xl ml-3 mt-1">{phase.emoji}</div>
         </div>
 
-        {/* Simple stats row - just the basics */}
+        {/* Simple stats row */}
         <div className="flex gap-3 mt-3">
           {[
             { label: 'Next period', value: daysToNext > 0 ? `in ${daysToNext} days` : 'Today' },
-            { label: 'Fertile window', value: getFertileWindowText() },
+            { label: 'Fertile window', value: cycleInfo.phase === 'ovulation' ? 'Now! ⭐' : 
+                cycleInfo.phase === 'follicular' ? 'Soon 🌸' : 
+                cycleInfo.phase === 'luteal' ? 'Next cycle' : '—' },
           ].map(s => (
             <div key={s.label} className="flex-1 rounded-2xl px-3 py-2 text-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
               <p className="text-[9px] uppercase tracking-wide opacity-70" style={{ color: phase.textColor }}>{s.label}</p>
@@ -609,7 +549,7 @@ export function CycleTab() {
           ))}
         </div>
 
-        {/* Moon sign - small */}
+        {/* Moon sign */}
         {userData.moon_sign && (
           <p className="text-xs mt-2 opacity-70 text-center" style={{ color: phase.textColor }}>
             🌙 {userData.moon_sign} Moon · {cycleInfo.accuracy}% accurate
@@ -622,37 +562,40 @@ export function CycleTab() {
         {/* Mini week */}
         <div className="grid grid-cols-7 mb-2">
           {weekDays.map(day => {
-            const dateStr = format(day, 'yyyy-MM-dd');
-            const status = getDayStatus(day, cycleInfo);
-            const isToday_ = isToday(day);
-            const isSelected = isSameDay(day, selectedDate);
-            const isPeriod = status === 'period';
-            const isFertile = status === 'fertile';
-            const isOvulation = status === 'ovulation';
-            const isPredicted = status === 'predicted';
-            return (
-              <button key={dateStr} onClick={() => { setSelectedDate(day); setShowLogModal(true); }}
-                className="flex flex-col items-center gap-1 py-1">
-                <span className="text-[10px] text-gray-400">{format(day, 'EEE')[0]}</span>
-                <div className="flex items-center justify-center rounded-full"
-                  style={{
-                    width: 34, height: 34,
-                    background: isPeriod ? '#f43f5e' : isOvulation ? '#14b8a6' : isFertile ? 'rgba(20,184,166,0.15)' : isSelected ? 'rgba(0,0,0,0.08)' : 'transparent',
-                    border: isToday_ && !isPeriod ? '2px solid #374151' : isPredicted ? '1.5px dashed #f43f5e' : 'none',
-                  }}>
-                  {isPeriod
-                    ? <Check strokeWidth={3} style={{ width: 13, height: 13, color: 'white' }} />
-                    : <span style={{
-                        fontSize: 13,
-                        fontWeight: isToday_ ? '800' : '400',
-                        color: isOvulation ? '#0f766e' : isFertile ? '#0d9488' : isPredicted ? '#f43f5e' : isToday_ ? '#111827' : '#6b7280',
-                      }}>{format(day, 'd')}</span>
-                  }
-                </div>
-                {isToday_ && <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#374151' }} />}
-              </button>
-            );
-          })}
+  const dateStr = format(day, 'yyyy-MM-dd');
+  const status = getDayStatus(day, cycleInfo);
+  const isToday_ = isToday(day);
+  const isSelected = isSameDay(day, selectedDate);
+  const isPeriod = status === 'period';
+  const isFertile = status === 'fertile';
+  const isOvulation = status === 'ovulation';
+  const isPredicted = status === 'predicted';
+  return (
+    <button key={dateStr} onClick={() => { setSelectedDate(day); setShowLogModal(true); }}
+      className="flex flex-col items-center gap-1 py-1 active:scale-95 transition-transform">
+      <span className="text-[10px] text-gray-400">{format(day, 'EEE')[0]}</span>
+      <div 
+        className="flex items-center justify-center rounded-full"
+        style={{
+          width: 34,
+          height: 34,
+          background: isPeriod ? '#f43f5e' : isOvulation ? '#14b8a6' : isFertile ? 'rgba(20,184,166,0.15)' : isSelected ? 'rgba(0,0,0,0.08)' : 'transparent',
+          border: isToday_ && !isPeriod ? '2px solid #374151' : isPredicted ? '1.5px dashed #f43f5e' : 'none',
+        }}
+      >
+        {isPeriod
+          ? <Check strokeWidth={3} style={{ width: 13, height: 13, color: 'white' }} />
+          : <span style={{
+              fontSize: 13,
+              fontWeight: isToday_ ? '800' : '400',
+              color: isOvulation ? '#0f766e' : isFertile ? '#0d9488' : isPredicted ? '#f43f5e' : isToday_ ? '#111827' : '#6b7280',
+            }}>{format(day, 'd')}</span>
+        }
+      </div>
+      {isToday_ && <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#374151' }} />}
+    </button>
+  );
+})}
         </div>
 
         {/* Log period + expand calendar */}
@@ -662,7 +605,7 @@ export function CycleTab() {
                 setShowFullCalendar(true);
                 setCalendarMonth(new Date());
                }}
-            className="flex-1 py-2.5 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5"
+            className="flex-1 py-2.5 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
             style={{
               background: editMode ? 'linear-gradient(135deg, #f43f5e, #fb7185)' : 'rgba(244,63,94,0.07)',
               color: editMode ? 'white' : '#f43f5e',
@@ -672,13 +615,13 @@ export function CycleTab() {
             {editMode ? 'Tap days to mark period' : 'Log period'}
           </button>
           <button onClick={() => setShowFullCalendar(v => !v)}
-            className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-            <Calendar className="w-4 h-4 text-gray-500" />
+            className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform">
+            <CalendarIcon className="w-4 h-4 text-gray-500" />
           </button>
         </div>
       </div>
 
-      {/* ── Expanded full calendar ── */}
+      {/* ── Expanded full calendar with react-calendar ── */}
       {showFullCalendar && (
         <div className="bg-white border-b border-gray-100 pb-3">
           <div className="flex items-center justify-between px-4 pt-3 pb-1">
@@ -686,40 +629,70 @@ export function CycleTab() {
             <button onClick={() => { if (window.confirm('Clear all period data?')) savePeriods([]); }}
               className="text-xs text-rose-400 font-medium">Clear all</button>
           </div>
-          <FullCalendar
-            month={calendarMonth}
-            cycleInfo={cycleInfo}
-            editMode={editMode}
-            onDayTap={handleDayTap}
-            onPrevMonth={() => setCalendarMonth(m => subMonths(m, 1))}
-            onNextMonth={() => setCalendarMonth(m => addMonths(m, 1))}
-          />
+          
+          {/* React Calendar Component */}
+          <div className="px-2 py-2">
+            <Calendar
+              value={calendarMonth}
+              onActiveStartDateChange={({ activeStartDate }) => {
+                if (activeStartDate) setCalendarMonth(activeStartDate);
+              }}
+              onClickDay={(date) => {
+                const normalizedDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                handleDayTap(normalizedDay);
+              }}
+              tileClassName={({ date, view }) => {
+                if (view !== 'month') return null;
+                const status = getDayStatus(date, cycleInfo);
+                if (status === 'period') return 'period-day';
+                if (status === 'ovulation') return 'ovulation-day';
+                if (status === 'fertile') return 'fertile-day';
+                if (status === 'predicted') return 'predicted-day';
+                return null;
+              }}
+              tileContent={({ date, view }) => {
+                if (view !== 'month') return null;
+                const isToday_ = isToday(date);
+                if (isToday_) {
+                  return <div className="today-dot" />;
+                }
+                return null;
+              }}
+              prevLabel={<ChevronLeft className="w-5 h-5" />}
+              nextLabel={<ChevronRight className="w-5 h-5" />}
+              prev2Label={null}
+              next2Label={null}
+              className="cycle-calendar"
+            />
+          </div>
+          
           {editMode && (
             <div className="px-4 pt-2">
               <button onClick={() => { setEditMode(false); setShowFullCalendar(false); }}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-rose-400 to-pink-400 text-white text-sm font-bold flex items-center justify-center gap-2">
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-rose-400 to-pink-400 text-white text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform">
                 <Check className="w-4 h-4" /> Done — period saved
               </button>
             </div>
           )}
+          
           {/* Legend */}
-          <div className="flex items-center gap-4 px-4 pt-3">
+          <div className="flex items-center justify-center gap-4 px-4 pt-3 pb-2">
             {[
               { bg: '#f43f5e', label: 'Period' },
-              { bg: 'rgba(244,63,94,0.08)', border: '1.5px dashed #f43f5e', label: 'Predicted' },
+              { bg: 'transparent', border: '1.5px dashed #f43f5e', label: 'Predicted' },
               { bg: 'rgba(20,184,166,0.15)', border: '1.5px solid rgba(20,184,166,0.5)', label: 'Fertile' },
               { bg: '#14b8a6', label: 'Ovulation' },
             ].map(l => (
               <div key={l.label} className="flex items-center gap-1">
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: l.bg, border: l.border }} />
-                <span className="text-[9px] text-gray-400">{l.label}</span>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: l.bg, border: l.border }} />
+                <span className="text-[10px] text-gray-400">{l.label}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* ── Scrollable content (ONLY ONE detailed explanation card) ── */}
+      {/* ── Scrollable content ── */}
       <div className="px-4 pt-4">
         {/* Today's log card */}
         <div className="rounded-3xl bg-white border border-rose-100 shadow-sm p-4 mb-4">
@@ -735,7 +708,7 @@ export function CycleTab() {
               </p>
             </div>
             <button onClick={() => setShowLogModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-rose-400 to-pink-400 text-white text-xs font-bold">
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-rose-400 to-pink-400 text-white text-xs font-bold active:scale-95 transition-transform">
               <Edit3 className="w-3 h-3" />
               {selectedLog ? 'Edit' : 'Log day'}
             </button>
@@ -753,7 +726,7 @@ export function CycleTab() {
           )}
         </div>
 
-        {/* ── DETAILED PHASE CARD (ONLY ONE COPY) ── */}
+        {/* ── DETAILED PHASE CARD ── */}
         {cycleInfo.phase !== 'unknown' && (
           <div className="rounded-3xl mb-4 overflow-hidden"
             style={{ background: `linear-gradient(135deg, ${phase.gradientFrom}15, ${phase.gradientTo}08)`, border: `1px solid ${phase.gradientFrom}30` }}>
@@ -790,7 +763,7 @@ export function CycleTab() {
                   <p className="text-xs text-gray-500 text-center">✅ You've logged {Object.keys(logs).length} day{Object.keys(logs).length !== 1 ? 's' : ''} — keep going! 🌙</p>
                 )}
                 <button onClick={() => setShowLogModal(true)}
-                  className="w-full mt-2 py-2 rounded-xl text-xs font-bold text-center"
+                  className="w-full mt-2 py-2 rounded-xl text-xs font-bold text-center active:scale-95 transition-transform"
                   style={{ background: `${phase.gradientFrom}20`, color: phase.gradientFrom }}>
                   + Log today's symptoms
                 </button>

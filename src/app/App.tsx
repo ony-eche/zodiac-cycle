@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { RouterProvider } from 'react-router';
 import { router } from './routes.tsx';
 import { UserDataProvider } from './context/UserDataContext';
@@ -145,6 +146,22 @@ export default function App() {
   const [checking, setChecking] = useState(true);
   const [user, setUser] = useState<any>(null);
 
+  // Helper function to check if user has completed onboarding
+  const checkProfileCompletion = async (userId: string) => {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('date_of_birth')
+        .eq('id', userId)
+        .single();
+      
+      return !!profile?.date_of_birth;
+    } catch (error) {
+      console.error('Error checking profile:', error);
+      return false;
+    }
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const path = window.location.pathname;
@@ -160,15 +177,31 @@ export default function App() {
       setChecking(false);
     });
 
-    // Listen for auth changes but don't redirect during onboarding
+    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         if (event === 'SIGNED_OUT') {
           router.navigate('/');
+          setUser(null);
+          return;
         }
+        
         // Set user when signed in
         if (session?.user) {
           setUser(session.user);
+          
+          // Check if user has completed onboarding
+          const hasCompletedOnboarding = await checkProfileCompletion(session.user.id);
+          const path = window.location.pathname;
+          const isOnboardingPath = path.startsWith('/onboarding');
+          const isAuthPath = path === '/login' || path === '/signup';
+          
+          // If user hasn't completed onboarding and is not already on an onboarding page,
+          // redirect to welcome
+          if (!hasCompletedOnboarding && !isOnboardingPath && !isAuthPath) {
+            console.log('User has incomplete profile, redirecting to onboarding');
+            router.navigate('/onboarding/welcome');
+          }
         } else {
           setUser(null);
         }
@@ -219,4 +252,4 @@ export default function App() {
       <RouterProvider router={router} />
     </UserDataProvider>
   );
-} 
+}
