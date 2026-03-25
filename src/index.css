@@ -134,3 +134,263 @@ iframe[src*="stripe"][style*="position:fixed"] {
     font-size: 14px;
   }
 }
+/* ============================================ */
+/* Zodiac Calendar Styles - Flo-like Experience */
+/* ============================================ */
+
+.zodiac-calendar {
+  border: none !important;
+  background: transparent !important;
+  width: 100% !important;
+  font-family: inherit !important;
+}
+
+/* Navigation */
+.zodiac-calendar .react-calendar__navigation {
+  margin-bottom: 1.5rem;
+}
+
+.zodiac-calendar .react-calendar__navigation button {
+  min-width: 44px;
+  background: none;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+  padding: 8px 12px;
+  border-radius: 30px;
+  transition: all 0.2s ease;
+}
+
+.zodiac-calendar .react-calendar__navigation button:enabled:hover,
+.zodiac-calendar .react-calendar__navigation button:enabled:focus {
+  background-color: rgba(244, 63, 94, 0.1);
+}
+
+.zodiac-calendar .react-calendar__navigation button:active {
+  transform: scale(0.95);
+}
+
+/* Weekday headers */
+.zodiac-calendar .react-calendar__month-view__weekdays {
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: 600;
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+
+.zodiac-calendar .react-calendar__month-view__weekdays__weekday {
+  padding: 0.5rem 0;
+}
+
+/* Calendar tiles */
+.zodiac-calendar .react-calendar__tile {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: transparent;
+  border-radius: 50%;
+  transition: all 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+  position: relative;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.zodiac-calendar .react-calendar__tile:enabled:hover {
+  transform: scale(0.92);
+  background-color: rgba(244, 63, 94, 0.1);
+}
+
+.zodiac-calendar .react-calendar__tile:enabled:active {
+  transform: scale(0.88);
+}
+
+/* Day content wrapper */
+.calendar-day-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.calendar-day-number {
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+/* Period days */
+.calendar-day-period {
+  background: linear-gradient(135deg, #f43f5e, #fb7185) !important;
+  color: white !important;
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.3);
+}
+
+.calendar-day-period .calendar-day-number {
+  color: white;
+  font-weight: 600;
+}
+
+.calendar-day-check {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  color: white;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
+  pointer-events: none;
+}
+
+/* Ovulation day */
+.calendar-day-ovulation {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24) !important;
+  color: white !important;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.calendar-day-ovulation .calendar-day-number {
+  color: white;
+  font-weight: 600;
+}
+
+.calendar-day-ovulation-star {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 10px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
+}
+
+/* Fertile window */
+.calendar-day-fertile {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border: 1.5px solid rgba(16, 185, 129, 0.5) !important;
+}
+
+.calendar-day-fertile .calendar-day-number {
+  color: #10b981;
+  font-weight: 600;
+}
+
+/* Predicted period */
+.calendar-day-predicted {
+  border: 2px dashed #f43f5e !important;
+  background: transparent !important;
+}
+
+.calendar-day-predicted .calendar-day-number {
+  color: #f43f5e;
+  font-weight: 500;
+}
+
+/* Selected day (for logging) */
+.calendar-day-selected {
+  background: rgba(244, 63, 94, 0.2) !important;
+  border: 2px solid #f43f5e !important;
+  transform: scale(0.95);
+}
+
+.calendar-day-selected .calendar-day-number {
+  color: #f43f5e;
+  font-weight: 700;
+}
+
+/* Today dot indicator */
+.calendar-day-today-dot {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: #f43f5e;
+}
+
+/* Disabled tiles (outside current month) */
+.zodiac-calendar .react-calendar__month-view__days__day--neighboringMonth {
+  opacity: 0.4;
+}
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  .zodiac-calendar .react-calendar__tile {
+    font-size: 0.8rem;
+  }
+  
+  .calendar-day-check {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .calendar-day-ovulation-star {
+    font-size: 8px;
+    top: 1px;
+    right: 1px;
+  }
+  
+  .calendar-day-today-dot {
+    width: 3px;
+    height: 3px;
+    bottom: 1px;
+  }
+}
+
+/* Haptic feedback for touch */
+.zodiac-calendar .react-calendar__tile:active {
+  transform: scale(0.92);
+  transition: transform 0.05s;
+}
+/* Visual feedback for clicking */
+.cycle-calendar .react-calendar__tile:active {
+  transform: scale(0.92) !important;
+  transition: transform 0.05s ease !important;
+}
+
+/* Period day click feedback */
+.period-day:active {
+  transform: scale(0.9) !important;
+  background-color: #e11d48 !important;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.5) !important;
+}
+
+/* Check mark container */
+.check-mark-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Pulse animation for newly added period days */
+.period-day-new {
+  animation: periodPulse 0.3s ease-out;
+}
+
+@keyframes periodPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 8px rgba(244, 63, 94, 0.3);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0);
+  }
+}

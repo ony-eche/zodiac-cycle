@@ -621,76 +621,90 @@ export function CycleTab() {
         </div>
       </div>
 
-      {/* ── Expanded full calendar with react-calendar ── */}
-      {showFullCalendar && (
-        <div className="bg-white border-b border-gray-100 pb-3">
-          <div className="flex items-center justify-between px-4 pt-3 pb-1">
-            <p className="text-xs text-gray-400">Tap days to mark • {editMode ? 'Edit mode ON' : 'Tap Log Period to edit'}</p>
-            <button onClick={() => { if (window.confirm('Clear all period data?')) savePeriods([]); }}
-              className="text-xs text-rose-400 font-medium">Clear all</button>
-          </div>
-          
-          {/* React Calendar Component */}
-          <div className="px-2 py-2">
-            <Calendar
-              value={calendarMonth}
-              onActiveStartDateChange={({ activeStartDate }) => {
-                if (activeStartDate) setCalendarMonth(activeStartDate);
-              }}
-              onClickDay={(date) => {
-                const normalizedDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-                handleDayTap(normalizedDay);
-              }}
-              tileClassName={({ date, view }) => {
-                if (view !== 'month') return null;
-                const status = getDayStatus(date, cycleInfo);
-                if (status === 'period') return 'period-day';
-                if (status === 'ovulation') return 'ovulation-day';
-                if (status === 'fertile') return 'fertile-day';
-                if (status === 'predicted') return 'predicted-day';
-                return null;
-              }}
-              tileContent={({ date, view }) => {
-                if (view !== 'month') return null;
-                const isToday_ = isToday(date);
-                if (isToday_) {
-                  return <div className="today-dot" />;
-                }
-                return null;
-              }}
-              prevLabel={<ChevronLeft className="w-5 h-5" />}
-              nextLabel={<ChevronRight className="w-5 h-5" />}
-              prev2Label={null}
-              next2Label={null}
-              className="cycle-calendar"
-            />
-          </div>
-          
-          {editMode && (
-            <div className="px-4 pt-2">
-              <button onClick={() => { setEditMode(false); setShowFullCalendar(false); }}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-rose-400 to-pink-400 text-white text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform">
-                <Check className="w-4 h-4" /> Done — period saved
-              </button>
-            </div>
-          )}
-          
-          {/* Legend */}
-          <div className="flex items-center justify-center gap-4 px-4 pt-3 pb-2">
-            {[
-              { bg: '#f43f5e', label: 'Period' },
-              { bg: 'transparent', border: '1.5px dashed #f43f5e', label: 'Predicted' },
-              { bg: 'rgba(20,184,166,0.15)', border: '1.5px solid rgba(20,184,166,0.5)', label: 'Fertile' },
-              { bg: '#14b8a6', label: 'Ovulation' },
-            ].map(l => (
-              <div key={l.label} className="flex items-center gap-1">
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: l.bg, border: l.border }} />
-                <span className="text-[10px] text-gray-400">{l.label}</span>
+{/* ── Expanded full calendar with react-calendar ── */}
+{showFullCalendar && (
+  <div className="bg-white border-b border-gray-100 pb-3">
+    <div className="flex items-center justify-between px-4 pt-3 pb-1">
+      <p className="text-xs text-gray-400">Tap days to mark • {editMode ? 'Edit mode ON' : 'Tap Log Period to edit'}</p>
+      <button onClick={() => { if (window.confirm('Clear all period data?')) savePeriods([]); }}
+        className="text-xs text-rose-400 font-medium">Clear all</button>
+    </div>
+    
+    {/* React Calendar Component */}
+    <div className="px-2 py-2">
+      <Calendar
+        key={`${periods.length}-${editMode}`}
+        defaultActiveStartDate={calendarMonth}
+        onActiveStartDateChange={({ activeStartDate }) => {
+          if (activeStartDate) setCalendarMonth(activeStartDate);
+        }}
+        onClickDay={(date) => {
+          const normalizedDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+          console.log('Calendar day clicked:', normalizedDay);
+          handleDayTap(normalizedDay);
+        }}
+        tileClassName={({ date, view }) => {
+          if (view !== 'month') return null;
+          const status = getDayStatus(date, cycleInfo);
+          if (status === 'period') return 'period-day';
+          if (status === 'ovulation') return 'ovulation-day';
+          if (status === 'fertile') return 'fertile-day';
+          if (status === 'predicted') return 'predicted-day';
+          return null;
+        }}
+        tileContent={({ date, view }) => {
+          if (view !== 'month') return null;
+          const status = getDayStatus(date, cycleInfo);
+          if (status === 'period') {
+            return (
+              <div className="check-mark-container">
+                <Check strokeWidth={2} className="w-3 h-3 text-white" />
               </div>
-            ))}
-          </div>
+            );
+          }
+          return null;
+        }}
+        tileDisabled={({ date, view }) => {
+          // Optional: disable future dates if you want
+          return false;
+        }}
+        prevLabel={<ChevronLeft className="w-5 h-5" />}
+        nextLabel={<ChevronRight className="w-5 h-5" />}
+        prev2Label={null}
+        next2Label={null}
+        showNeighboringMonth={true}
+        minDetail="month"
+        maxDetail="month"
+        className="cycle-calendar"
+      />
+    </div>
+    
+    {editMode && (
+      <div className="px-4 pt-2">
+        <button onClick={() => { setEditMode(false); setShowFullCalendar(false); }}
+          className="w-full py-3 rounded-2xl bg-gradient-to-r from-rose-400 to-pink-400 text-white text-sm font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform">
+          <Check className="w-4 h-4" /> Done — period saved
+        </button>
+      </div>
+    )}
+    
+    {/* Legend */}
+    <div className="flex items-center justify-center gap-4 px-4 pt-3 pb-2 flex-wrap">
+      {[
+        { bg: '#f43f5e', label: 'Period' },
+        { bg: 'transparent', border: '1.5px dashed #f43f5e', label: 'Predicted' },
+        { bg: 'rgba(20,184,166,0.15)', border: '1.5px solid rgba(20,184,166,0.5)', label: 'Fertile' },
+        { bg: '#14b8a6', label: 'Ovulation' },
+      ].map(l => (
+        <div key={l.label} className="flex items-center gap-1">
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: l.bg, border: l.border }} />
+          <span className="text-[10px] text-gray-400">{l.label}</span>
         </div>
-      )}
+      ))}
+    </div>
+  </div>
+)}
+        
 
       {/* ── Scrollable content ── */}
       <div className="px-4 pt-4">
