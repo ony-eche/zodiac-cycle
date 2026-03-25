@@ -10,9 +10,12 @@
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@types/web-push": "^3.6.4",
     "wrangler": "^4.71.0"
   },
   "dependencies": {
-    "astronomia": "^4.2.0"
+    "astronomia": "^4.2.0",
+    "web-push": "^3.6.7"
   }
+  
 }

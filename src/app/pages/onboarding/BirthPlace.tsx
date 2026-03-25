@@ -60,6 +60,7 @@ export function BirthPlace() {
       setResults([]);
       return;
     }
+    
     // Don't search if this exact text matches what was selected
     if (selected) {
       const selectedText = `${selected.name}, ${selected.admin1 ? selected.admin1 + ', ' : ''}${selected.country}`;
@@ -75,7 +76,7 @@ export function BirthPlace() {
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [place]); // only depend on place, not selected
+  }, [place, selected]); // ✅ Added 'selected' to dependencies
 
   const handleSelect = (location: LocationResult) => {
     setSelected(location);
@@ -86,7 +87,7 @@ export function BirthPlace() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPlace(e.target.value);
-    setSelected(null);
+    setSelected(null); // ✅ This correctly clears selection when user edits
   };
 
   const handleContinue = () => {
@@ -131,7 +132,7 @@ export function BirthPlace() {
             </div>
 
             {showResults && results.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-xl shadow-lg overflow-hidden">
+              <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-xl shadow-lg overflow-hidden max-h-64 overflow-y-auto">
                 {results.map((result, index) => (
                   <button
                     key={index}
@@ -154,7 +155,7 @@ export function BirthPlace() {
 
             {showResults && results.length === 0 && !loading && place.length >= 2 && (
               <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-xl shadow-lg p-4 text-center text-muted-foreground text-sm">
-                No cities found. Try a different spelling.
+                {t('onboarding.birthPlace.noResults', 'No cities found. Try a different spelling.')}
               </div>
             )}
           </div>
@@ -176,4 +177,4 @@ export function BirthPlace() {
       </div>
     </div>
   );
-} 
+}

@@ -5,7 +5,7 @@ export interface UserData {
   name?: string;
   email?: string;
   stripe_customer_id?: string;
-  dateOfBirth?: Date;
+  dateOfBirth?: string; // ✅ Changed from Date to string (YYYY-MM-DD)
   timeOfBirth?: string;
   placeOfBirth?: string;
   birth_lat?: number;
@@ -25,8 +25,8 @@ export interface UserData {
   tracksPeriods?: boolean;
   periodsRegular?: boolean;
   knowsLastPeriod?: boolean;
-  lastPeriodStart?: Date;
-  lastPeriodEnd?: Date;
+  lastPeriodStart?: string; // ✅ Changed from Date to string (YYYY-MM-DD)
+  lastPeriodEnd?: string; // ✅ Changed from Date to string (YYYY-MM-DD)
   hormonalTracking?: {
     mood?: string; stressLevel?: string; sleepQuality?: string;
     headaches?: boolean; cramps?: boolean; libido?: string;
@@ -59,9 +59,7 @@ function loadFromStorage(): UserData {
     const saved = sessionStorage.getItem('zodiac_user_data');
     if (!saved) return {};
     const parsed = JSON.parse(saved);
-    if (parsed.dateOfBirth) parsed.dateOfBirth = new Date(parsed.dateOfBirth);
-    if (parsed.lastPeriodStart) parsed.lastPeriodStart = new Date(parsed.lastPeriodStart);
-    if (parsed.lastPeriodEnd) parsed.lastPeriodEnd = new Date(parsed.lastPeriodEnd);
+    // ✅ No need to convert dates anymore - they're already strings
     return parsed;
   } catch { return {}; }
 }
@@ -75,7 +73,7 @@ function toSupabaseRow(data: UserData) {
   return {
     name: data.name,
     email: data.email,
-    date_of_birth: data.dateOfBirth?.toISOString(),
+    date_of_birth: data.dateOfBirth, // ✅ Already a string (YYYY-MM-DD)
     time_of_birth: data.timeOfBirth,
     place_of_birth: data.placeOfBirth,
     birth_lat: data.birth_lat,
@@ -94,8 +92,8 @@ function toSupabaseRow(data: UserData) {
     country_code: data.country_code,
     currency: data.currency,
     tracks_periods: data.tracksPeriods,
-    last_period_start: data.lastPeriodStart?.toISOString(),
-    last_period_end: data.lastPeriodEnd?.toISOString(),
+    last_period_start: data.lastPeriodStart, // ✅ Already a string (YYYY-MM-DD)
+    last_period_end: data.lastPeriodEnd, // ✅ Already a string (YYYY-MM-DD)
     has_paid: data.hasPaid,
     updated_at: new Date().toISOString(),
   };
@@ -106,7 +104,7 @@ function fromSupabaseRow(row: any): UserData {
   return {
     name: row.name,
     email: row.email,
-    dateOfBirth: row.date_of_birth ? new Date(row.date_of_birth) : undefined,
+    dateOfBirth: row.date_of_birth, // ✅ Keep as string from Supabase
     timeOfBirth: row.time_of_birth,
     placeOfBirth: row.place_of_birth,
     birth_lat: row.birth_lat,
@@ -125,8 +123,8 @@ function fromSupabaseRow(row: any): UserData {
     country_code: row.country_code,
     currency: row.currency,
     tracksPeriods: row.tracks_periods,
-    lastPeriodStart: row.last_period_start ? new Date(row.last_period_start) : undefined,
-    lastPeriodEnd: row.last_period_end ? new Date(row.last_period_end) : undefined,
+    lastPeriodStart: row.last_period_start, // ✅ Keep as string from Supabase
+    lastPeriodEnd: row.last_period_end, // ✅ Keep as string from Supabase
     hasPaid: row.has_paid,
   };
 }

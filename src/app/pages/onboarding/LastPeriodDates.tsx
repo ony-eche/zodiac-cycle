@@ -8,17 +8,51 @@ import { useTranslation } from 'react-i18next';
 
 export function LastPeriodDates() {
   const navigate = useNavigate();
-  const { updateUserData } = useUserData();
+  const { userData, updateUserData } = useUserData();
   const { t } = useTranslation();
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  
+  // ✅ Initialize from existing user data if available
+  const [startDate, setStartDate] = useState<string>(() => {
+    if (userData.lastPeriodStart) {
+      // If it's already a string, use it; if it's a Date object (old data), format it
+      if (typeof userData.lastPeriodStart === 'string') {
+        return userData.lastPeriodStart;
+      }
+      // Handle old Date object format (fallback)
+      const d = new Date(userData.lastPeriodStart);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    return '';
+  });
+  
+  const [endDate, setEndDate] = useState<string>(() => {
+    if (userData.lastPeriodEnd) {
+      if (typeof userData.lastPeriodEnd === 'string') {
+        return userData.lastPeriodEnd;
+      }
+      const d = new Date(userData.lastPeriodEnd);
+      return `${d.getFullYear()}-${String(d.getMonth()  + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    return '';
+  });
+  
   const today = new Date().toISOString().split('T')[0];
 
   const handleContinue = () => {
     if (startDate && endDate) {
-      updateUserData({ lastPeriodStart: new Date(startDate), lastPeriodEnd: new Date(endDate) });
+      // ✅ Store as ISO date strings (YYYY-MM-DD)
+      updateUserData({ 
+        lastPeriodStart: startDate,
+        lastPeriodEnd: endDate 
+      });
       navigate('/onboarding/hormonal-tracking');
     }
+  };
+
+  // Validate end date is not before start date
+  const isValidRange = () => {
+    if (!startDate || !endDate) return false;
+    return endDate >= startDate;
   };
 
   return (
@@ -38,7 +72,11 @@ export function LastPeriodDates() {
                 <input
                   type="date"
                   value={startDate}
-                  onChange={(e) => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(''); }}
+                  onChange={(e) => { 
+                    setStartDate(e.target.value); 
+                    // If end date is before new start date, clear end date
+                    if (endDate && e.target.value > endDate) setEndDate(''); 
+                  }}
                   max={today}
                   min="2000-01-01"
                   className="w-full pl-12 pr-4 py-4 text-lg bg-input-background border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
@@ -59,10 +97,23 @@ export function LastPeriodDates() {
                   className="w-full pl-12 pr-4 py-4 text-lg bg-input-background border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
-              {!startDate && <p className="text-xs text-muted-foreground">Pick a start date first</p>}
+              {!startDate && (
+                <p className="text-xs text-muted-foreground">
+                  {t('onboarding.lastPeriod.pickStartFirst', 'Pick a start date first')}
+                </p>
+              )}
+              {startDate && endDate && !isValidRange() && (
+                <p className="text-xs text-red-500">
+                  {t('onboarding.lastPeriod.endAfterStart', 'End date must be after start date')}
+                </p>
+              )}
             </div>
           </div>
-          <Button onClick={handleContinue} disabled={!startDate || !endDate} className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white py-6 rounded-xl">
+          <Button 
+            onClick={handleContinue} 
+            disabled={!startDate || !endDate || !isValidRange()} 
+            className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white py-6 rounded-xl"
+          >
             {t('onboarding.next')}
           </Button>
         </div>

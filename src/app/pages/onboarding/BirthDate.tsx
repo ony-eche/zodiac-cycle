@@ -10,15 +10,53 @@ export function BirthDate() {
   const navigate = useNavigate();
   const { userData, updateUserData } = useUserData();
   const { t } = useTranslation();
-  const [date, setDate] = useState<string>(
-    userData.dateOfBirth ? userData.dateOfBirth.toISOString().split('T')[0] : ''
-  );
+  
+  // Store as YYYY-MM-DD string consistently
+  const [date, setDate] = useState<string>(() => {
+    if (userData.dateOfBirth) {
+      // If it's already a string, use it; if it's a Date object, format it
+      if (typeof userData.dateOfBirth === 'string') {
+        return userData.dateOfBirth;
+      }
+      // Convert Date object to YYYY-MM-DD without timezone issues
+      const d = new Date(userData.dateOfBirth);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    return '';
+  });
 
   const handleContinue = () => {
     if (date) {
-      updateUserData({ dateOfBirth: new Date(date) });
+      // Store as ISO date string (YYYY-MM-DD) without time component
+      // This avoids timezone issues
+      updateUserData({ dateOfBirth: date });
       navigate('/onboarding/birth-time');
     }
+  };
+
+  // Validate date is reasonable
+  const isValidDate = () => {
+    if (!date) return false;
+    const selectedDate = new Date(date);
+    const today = new Date();
+    const minDate = new Date('1900-01-01');
+    
+    // Check if date is between 1900 and today
+    if (selectedDate < minDate || selectedDate > today) {
+      return false;
+    }
+    
+    // Check if user is at least 13 years old (for legal reasons)
+    const age = today.getFullYear() - selectedDate.getFullYear();
+    const monthDiff = today.getMonth() - selectedDate.getMonth();
+    if (age < 13 || (age === 13 && monthDiff < 0)) {
+      return false;
+    }
+    
+    return true;
   };
 
   return (
@@ -43,10 +81,18 @@ export function BirthDate() {
                 className="w-full pl-12 pr-4 py-4 text-lg bg-input-background border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
+            {date && !isValidDate() && (
+              <p className="text-sm text-red-500 mt-1">
+                {new Date(date) > new Date() 
+                  ? t('onboarding.birthDate.futureError', 'Birth date cannot be in the future')
+                  : t('onboarding.birthDate.ageError', 'You must be at least 13 years old')
+                }
+              </p>
+            )}
           </div>
           <Button
             onClick={handleContinue}
-            disabled={!date}
+            disabled={!date || !isValidDate()}
             className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white py-6 rounded-xl"
           >
             {t('onboarding.next')}
@@ -54,7 +100,10 @@ export function BirthDate() {
         </div>
         <div className="flex justify-center gap-2 mt-8">
           {[...Array(10)].map((_, i) => (
-            <div key={i} className={`h-1.5 rounded-full transition-all ${i === 1 ? 'w-8 bg-primary' : 'w-1.5 bg-border'}`} />
+            <div 
+              key={i} 
+              className={`h-1.5 rounded-full transition-all ${i === 1 ? 'w-8 bg-primary' : 'w-1.5 bg-border'}`} 
+            />
           ))}
         </div>
       </div>
