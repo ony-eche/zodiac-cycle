@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useUserData } from '../context/UserDataContext';
 
 interface AdBannerProps {
-  slot: string;
+  slot?: string;
   format?: 'auto' | 'horizontal' | 'rectangle';
   className?: string;
 }

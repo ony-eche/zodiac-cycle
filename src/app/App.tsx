@@ -5,114 +5,6 @@ import { UserDataProvider } from './context/UserDataContext';
 import { supabase } from '../lib/supabase';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-console.log('[App] Module loading...');
-
-// Helper: Convert base64 URL safe string to Uint8Array
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
-
-// Helper: Convert ArrayBuffer to base64
-function arrayBufferToBase64(buffer: ArrayBuffer | null): string {
-  if (!buffer) return '';
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-// Register push subscription with your worker
-async function registerPushSubscription(userId: string) {
-  try {
-    if (!navigator.serviceWorker) {
-      console.log('Service Worker not supported');
-      return false;
-    }
-
-    // FIX: Don't wait forever for the Service Worker. 
-    // If it's not ready in 3 seconds, move on.
-    const registration = await Promise.race([
-      navigator.serviceWorker.ready,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('SW Timeout')), 3000))
-    ]) as ServiceWorkerRegistration;
-
-    const existingSubscription = await registration.pushManager.getSubscription();
-    if (existingSubscription) {
-      console.log('Already subscribed to push notifications');
-      return true;
-    }
-
-    const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-    if (!vapidPublicKey) {
-      console.error('VAPID_PUBLIC_KEY not set');
-      return false;
-    }
-
-    const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
-    const subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: applicationServerKey.buffer as ArrayBuffer
-    });
-
-    const response = await fetch(`${import.meta.env.VITE_WORKER_URL}/push/subscribe`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        subscription: {
-          endpoint: subscription.endpoint,
-          keys: {
-            p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
-            auth: arrayBufferToBase64(subscription.getKey('auth'))
-          }
-        }
-      })
-    });
-
-    return response.ok;
-  } catch (error) {
-    console.error('Push registration failed:', error);
-    return false;
-  }
-}
-
-async function requestNotificationPermission(userId: string) {
-  if (!('Notification' in window)) return false;
-
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-
-  if (isIOS && !isStandalone) {
-    console.log('iOS: App must be installed for push.');
-    return false;
-  }
-
-  if (Notification.permission === 'granted') {
-    await registerPushSubscription(userId);
-    return true;
-  }
-
-  try {
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      await registerPushSubscription(userId);
-      return true;
-    }
-  } catch (error) {
-    console.error('Permission request error:', error);
-  }
-  return false;
-}
-
 export default function App() {
   const [checking, setChecking] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -132,12 +24,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    console.log('[App] Initializing auth...');
-
-    // 🔥 THE SAFETY SWITCH: Force "checking" to false after 4 seconds
+    // Force "checking" to false after 4 seconds if auth hangs
     const safetyTimer = setTimeout(() => {
       if (checking) {
-        console.warn('[App] Safety timeout triggered. Showing app anyway.');
         setChecking(false);
       }
     }, 4000);
@@ -146,7 +35,6 @@ export default function App() {
       .then(({ data: { session } }) => {
         if (session?.user) {
           setUser(session.user);
-          // Only redirect if on root
           if (window.location.pathname === '/') {
             router.navigate('/dashboard');
           }
@@ -155,7 +43,6 @@ export default function App() {
         clearTimeout(safetyTimer);
       })
       .catch((err) => {
-        console.error('[App] Auth error:', err);
         setError(err.message);
         setChecking(false);
         clearTimeout(safetyTimer);
@@ -168,9 +55,17 @@ export default function App() {
           setUser(null);
         } else if (session?.user) {
           setUser(session.user);
+          
           const hasCompleted = await checkProfileCompletion(session.user.id);
           const path = window.location.pathname;
-          if (!hasCompleted && !path.includes('onboarding') && !path.includes('login')) {
+
+          const isFinishingFlow = 
+            path.includes('onboarding') || 
+            path.includes('login') || 
+            path.includes('paywall') || 
+            path.includes('signup');
+
+          if (!hasCompleted && !isFinishingFlow) {
             router.navigate('/onboarding/welcome');
           }
         }
@@ -183,11 +78,12 @@ export default function App() {
     };
   }, []);
 
-  // Request notifications after login
   useEffect(() => {
     if (!checking && user) {
-      const timer = setTimeout(() => requestNotificationPermission(user.id), 2000);
-      return () => clearTimeout(timer);
+      const OneSignal = (window as any).OneSignal;
+      if (OneSignal) {
+        OneSignal.login(user.id);
+      }
     }
   }, [checking, user]);
 

@@ -6,12 +6,12 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
-  "scripts": {
-    "build": "vite build",
-    "dev": "vite",
-    "deploy": "npm run build && wrangler deploy",
-    "preview": "npm run build && wrangler dev"
-  },
+ "scripts": {
+  "dev": "vite",
+  "build": "vite build && ncp public/OneSignalSDKWorker.js dist/OneSignalSDKWorker.js && ncp public/OneSignalSDKUpdaterWorker.js dist/OneSignalSDKUpdaterWorker.js",
+  "preview": "vite preview",
+  "deploy": "vercel --prod"
+},
   "dependencies": {
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
@@ -86,6 +86,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "4.7.0",
+    "ncp": "^2.0.0",
     "tailwindcss": "4.1.12",
     "vite": "^6.4.1",
     "wrangler": "^4.77.0"

@@ -6,42 +6,26 @@
     <meta name="description" content="Track your menstrual cycle and discover your astrological chart. Daily cosmic insights personalized to your birth chart and cycle phase." />
     <meta name="theme-color" content="#c084fc" />
     
-    <!-- iOS PWA Settings -->
-     <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ZodiacCycle" />
     
-    <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-    
-    <!-- Apple Touch Icons (additional sizes for better support) -->
-    <link rel="apple-touch-icon" sizes="57x57" href="/icons/apple-icon-57x57.png">
-    <link rel="apple-touch-icon" sizes="60x60" href="/icons/apple-icon-60x60.png">
-    <link rel="apple-touch-icon" sizes="72x72" href="/icons/apple-icon-72x72.png">
-    <link rel="apple-touch-icon" sizes="76x76" href="/icons/apple-icon-76x76.png">
-    <link rel="apple-touch-icon" sizes="114x114" href="/icons/apple-icon-114x114.png">
-    <link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-icon-120x120.png">
-    <link rel="apple-touch-icon" sizes="144x144" href="/icons/apple-icon-144x144.png">
-    <link rel="apple-touch-icon" sizes="152x152" href="/icons/apple-icon-152x152.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-icon-180x180.png">
     
-    <!-- Regular favicon -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
-    
-  <!-- OneSignal Push Notifications -->
-<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
-  // Wait for the page to load
-  window.addEventListener('load', function() {
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    OneSignalDeferred.push(function(OneSignal) {
-      OneSignal.init({
-        appId: "5ed65387-dfdd-48de-b894-66dcf52cd0b6",
-        allowLocalhostAsSecureOrigin: true,
-      });
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "5ed65387-dfdd-48de-b894-66dcf52cd0b6",
+      safari_web_id: "web.onesignal.auto.69055919-4623-4418-97cb-29f03c62586e", // Optional but helps older Macs
+      notifyButton: {
+        enable: false, // We will trigger this manually in the app
+      },
+      allowLocalhostAsSecureOrigin: true,
     });
   });
 </script>
@@ -49,20 +33,18 @@
     <title>ZodiacCycle</title>
 
     <style>
+      /* Prevent Stripe iframes from cluttering the UI */
       body > iframe[src*="stripe"] { display: none !important; }
+      
+      /* Smooth font loading */
+      @font-face {
+        font-family: 'Jua';
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(https://fonts.gstatic.com/s/jua/v18/8S5Ydf8H_n3r_v4.woff2) format('woff2');
+      }
     </style>
-
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Jua&display=swap"
-      rel="stylesheet"
-      media="print"
-      onload="this.media='all'"
-    />
-    <noscript>
-      <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet" />
-    </noscript>
 
     <script
       async
@@ -71,19 +53,7 @@
     ></script>
   </head>
   <body>
-    <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-
-    <script>
-      setTimeout(() => {
-        const loadingScreen = document.getElementById('loading-screen'); 
-        // Note: Make sure your loading div in main.tsx actually has this ID!
-        if (loadingScreen && loadingScreen.style.display !== 'none') {
-          console.log("Loading taking too long... forcing refresh.");
-          window.location.reload(true); 
-        }
-      }, 10000);
-    </script>
   </body>
 </html>

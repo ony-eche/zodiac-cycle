@@ -6,26 +6,26 @@ async function sendPushWithOneSignal(env: any, userIds: string[], title: string,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Key ${env.ONESIGNAL_API_KEY}`,
+        // CRITICAL FIX: Must be "Basic", not "Key"
+        'Authorization': `Basic ${env.ONESIGNAL_API_KEY}`,
       },
       body: JSON.stringify({
         app_id: env.ONESIGNAL_APP_ID,
         contents: { en: body },
         headings: { en: title },
+        // Target specifically by the Supabase ID linked via OneSignal.login()
         include_aliases: {
-          external_id: userIds
+          external_id: userIds 
         },
-        target_channel: "web_push",
+        target_channel: "push", 
         web_url: `https://zodiaccycle.app${url}`,
-        web_buttons: [
-          { id: "open", text: "Open App", url: `https://zodiaccycle.app${url}` }
-        ]
       })
     });
     
-    const result = await response.json();
+    const result = await response.json() as any;
+    
     if (response.ok) {
-      console.log(`✅ OneSignal push sent to ${userIds.length} users`);
+      console.log(`✅ OneSignal push sent to ${userIds.length} users. ID: ${result.id}`);
     } else {
       console.error('❌ OneSignal API error:', result);
     }

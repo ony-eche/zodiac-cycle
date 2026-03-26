@@ -393,4 +393,61 @@ iframe[src*="stripe"][style*="position:fixed"] {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(244, 63, 94, 0);
   }
+  /* Container Reset */
+}.zodiac-calendar 
+{
+  width: 100% !important;
+  border: none !important;
+  font-family: inherit !important;
+  background: transparent !important;
+}
+
+/* Tile Basics */
+.zodiac-calendar .react-calendar__tile {
+  height: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+/* Status: Period (Logged) */
+.zodiac-calendar .calendar-day-period {
+  background: #f43f5e !important; /* Rose 500 */
+  color: white !important;
+  border-radius: 50% !important;
+}
+
+/* Status: Predicted Period */
+.zodiac-calendar .calendar-day-predicted {
+  background: transparent !important;
+  border: 1.5px dashed #f43f5e !important;
+  color: #f43f5e !important;
+}
+
+/* Status: Ovulation (The Star Day) */
+.zodiac-calendar .calendar-day-ovulation {
+  background: #f0fdfa !important; /* Teal 50 */
+  color: #0d9488 !important; /* Teal 600 */
+}
+
+/* Status: Fertile Window */
+.zodiac-calendar .calendar-day-fertile {
+  background: rgba(20, 184, 166, 0.1) !important;
+  color: #0d9488 !important;
+}
+
+/* Selected Day (Focus) */
+.zodiac-calendar .calendar-day-selected {
+  outline: 2px solid #374151;
+  outline-offset: -2px;
+}
+
+/* Hide the default "active" blue background of react-calendar */
+.react-calendar__tile--active {
+  background: transparent !important;
+  color: inherit !important;
 }

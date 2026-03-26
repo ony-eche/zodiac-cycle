@@ -1,8 +1,11 @@
-{
+
+  {
+  "id": "/",
   "name": "ZodiacCycle",
   "short_name": "ZodiacCycle",
   "description": "Menstrual cycle tracking with astrology",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0f0a1e",
   "theme_color": "#c084fc",
