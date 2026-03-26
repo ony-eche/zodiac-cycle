@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../../lib/supabase';
 
+console.log('[UserDataContext] Module loading');
+
 export interface UserData {
   name?: string;
   email?: string;
@@ -59,7 +61,6 @@ function loadFromStorage(): UserData {
     const saved = sessionStorage.getItem('zodiac_user_data');
     if (!saved) return {};
     const parsed = JSON.parse(saved);
-    // ✅ No need to convert dates anymore - they're already strings
     return parsed;
   } catch { return {}; }
 }
@@ -73,7 +74,7 @@ function toSupabaseRow(data: UserData) {
   return {
     name: data.name,
     email: data.email,
-    date_of_birth: data.dateOfBirth, // ✅ Already a string (YYYY-MM-DD)
+    date_of_birth: data.dateOfBirth,
     time_of_birth: data.timeOfBirth,
     place_of_birth: data.placeOfBirth,
     birth_lat: data.birth_lat,
@@ -92,8 +93,8 @@ function toSupabaseRow(data: UserData) {
     country_code: data.country_code,
     currency: data.currency,
     tracks_periods: data.tracksPeriods,
-    last_period_start: data.lastPeriodStart, // ✅ Already a string (YYYY-MM-DD)
-    last_period_end: data.lastPeriodEnd, // ✅ Already a string (YYYY-MM-DD)
+    last_period_start: data.lastPeriodStart,
+    last_period_end: data.lastPeriodEnd,
     has_paid: data.hasPaid,
     updated_at: new Date().toISOString(),
   };
@@ -104,7 +105,7 @@ function fromSupabaseRow(row: any): UserData {
   return {
     name: row.name,
     email: row.email,
-    dateOfBirth: row.date_of_birth, // ✅ Keep as string from Supabase
+    dateOfBirth: row.date_of_birth,
     timeOfBirth: row.time_of_birth,
     placeOfBirth: row.place_of_birth,
     birth_lat: row.birth_lat,
@@ -123,39 +124,17 @@ function fromSupabaseRow(row: any): UserData {
     country_code: row.country_code,
     currency: row.currency,
     tracksPeriods: row.tracks_periods,
-    lastPeriodStart: row.last_period_start, // ✅ Keep as string from Supabase
-    lastPeriodEnd: row.last_period_end, // ✅ Keep as string from Supabase
+    lastPeriodStart: row.last_period_start,
+    lastPeriodEnd: row.last_period_end,
     hasPaid: row.has_paid,
   };
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function UserDataProvider({ children }: { children: ReactNode }) {
+  console.log('[UserDataContext] Provider rendering');
   const [userData, setUserData] = useState<UserData>(loadFromStorage);
-
-  // On mount — check if user is already logged in and load their Supabase profile
-  useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await loadFromSupabaseInternal(session.user.id);
-      }
-    };
-    init();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        await loadFromSupabaseInternal(session.user.id);
-      }
-      if (event === 'SIGNED_OUT') {
-        sessionStorage.removeItem('zodiac_user_data');
-        setUserData({});
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  console.log('[UserDataContext] userData state:', userData);
 
   const loadFromSupabaseInternal = async (userId: string) => {
     try {
@@ -167,12 +146,9 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
 
       if (error || !data) return;
 
-      // Merge Supabase data with local session data (local takes priority for fresh onboarding)
       const local = loadFromStorage();
       const remote = fromSupabaseRow(data);
 
-      // If local has chart data (just completed onboarding), keep it
-      // If remote has chart data and local doesn't, use remote
       const merged: UserData = {
         ...remote,
         ...Object.fromEntries(
@@ -186,6 +162,34 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
       console.error('Failed to load from Supabase:', err);
     }
   };
+
+  // On mount — check if user is already logged in and load their Supabase profile
+  useEffect(() => {
+    console.log('[UserDataContext] useEffect - initializing');
+    const init = async () => {
+      console.log('[UserDataContext] Getting session...');
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log('[UserDataContext] Session:', session ? 'exists' : 'none');
+      if (session?.user) {
+        await loadFromSupabaseInternal(session.user.id);
+      }
+    };
+    init();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[UserDataContext] Auth event:', event);
+      if (event === 'SIGNED_IN' && session?.user) {
+        await loadFromSupabaseInternal(session.user.id);
+      }
+      if (event === 'SIGNED_OUT') {
+        sessionStorage.removeItem('zodiac_user_data');
+        setUserData({});
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const syncToSupabase = async () => {
     try {

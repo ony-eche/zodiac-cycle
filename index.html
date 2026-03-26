@@ -1,34 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <!-- PWA Manifest -->
-<link rel="manifest" href="/manifest.json" />
-
-<!-- iOS / Apple Touch Icons -->
-<link rel="apple-touch-icon" sizes="57x57" href="/icons/apple-icon-57x57.png">
-<link rel="apple-touch-icon" sizes="60x60" href="/icons/apple-icon-60x60.png">
-<link rel="apple-touch-icon" sizes="72x72" href="/icons/apple-icon-72x72.png">
-<link rel="apple-touch-icon" sizes="76x76" href="/icons/apple-icon-76x76.png">
-<link rel="apple-touch-icon" sizes="114x114" href="/icons/apple-icon-114x114.png">
-<link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-icon-120x120.png">
-<link rel="apple-touch-icon" sizes="144x144" href="/icons/apple-icon-144x144.png">
-<link rel="apple-touch-icon" sizes="152x152" href="/icons/apple-icon-152x152.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-icon-180x180.png">
-
-<!-- iOS PWA Settings -->
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="ZodiacCycle" />
-
-<!-- Regular favicon -->
-<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Track your menstrual cycle and discover your astrological chart. Daily cosmic insights personalized to your birth chart and cycle phase." />
     <meta name="theme-color" content="#c084fc" />
     
-    <!-- iOS PWA specific meta tags - THESE MUST BE IN HEAD -->
+    <!-- iOS PWA Settings -->
+     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ZodiacCycle" />
@@ -36,6 +15,36 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    
+    <!-- Apple Touch Icons (additional sizes for better support) -->
+    <link rel="apple-touch-icon" sizes="57x57" href="/icons/apple-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="/icons/apple-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="/icons/apple-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="/icons/apple-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="/icons/apple-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="/icons/apple-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/apple-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-icon-180x180.png">
+    
+    <!-- Regular favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
+    
+  <!-- OneSignal Push Notifications -->
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  // Wait for the page to load
+  window.addEventListener('load', function() {
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(function(OneSignal) {
+      OneSignal.init({
+        appId: "5ed65387-dfdd-48de-b894-66dcf52cd0b6",
+        allowLocalhostAsSecureOrigin: true,
+      });
+    });
+  });
+</script>
     
     <title>ZodiacCycle</title>
 
@@ -62,16 +71,19 @@
     ></script>
   </head>
   <body>
+    <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    
+
     <script>
-      // Register service worker for push notifications
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('Service Worker registered:', reg))
-          .catch(err => console.error('Service Worker failed:', err));
-      }
+      setTimeout(() => {
+        const loadingScreen = document.getElementById('loading-screen'); 
+        // Note: Make sure your loading div in main.tsx actually has this ID!
+        if (loadingScreen && loadingScreen.style.display !== 'none') {
+          console.log("Loading taking too long... forcing refresh.");
+          window.location.reload(true); 
+        }
+      }, 10000);
     </script>
   </body>
 </html>

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
 import { RouterProvider } from 'react-router';
 import { router } from './routes.tsx';
 import { UserDataProvider } from './context/UserDataContext';
 import { supabase } from '../lib/supabase';
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+console.log('[App] Module loading...');
 
 // Helper: Convert base64 URL safe string to Uint8Array
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -31,35 +33,36 @@ function arrayBufferToBase64(buffer: ArrayBuffer | null): string {
 // Register push subscription with your worker
 async function registerPushSubscription(userId: string) {
   try {
-    // Check if service worker is ready
     if (!navigator.serviceWorker) {
       console.log('Service Worker not supported');
       return false;
     }
-    
-    const registration = await navigator.serviceWorker.ready;
+
+    // FIX: Don't wait forever for the Service Worker. 
+    // If it's not ready in 3 seconds, move on.
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SW Timeout')), 3000))
+    ]) as ServiceWorkerRegistration;
+
     const existingSubscription = await registration.pushManager.getSubscription();
-    
     if (existingSubscription) {
       console.log('Already subscribed to push notifications');
       return true;
     }
-    
+
     const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
     if (!vapidPublicKey) {
-      console.error('VAPID_PUBLIC_KEY not set in environment');
+      console.error('VAPID_PUBLIC_KEY not set');
       return false;
     }
-    
-    // Convert the VAPID key to the correct format
+
     const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
-    
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: applicationServerKey.buffer as ArrayBuffer
     });
-    
-    // Send subscription to your worker
+
     const response = await fetch(`${import.meta.env.VITE_WORKER_URL}/push/subscribe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -74,79 +77,47 @@ async function registerPushSubscription(userId: string) {
         }
       })
     });
-    
-    if (response.ok) {
-      console.log('Push subscription saved successfully');
-      return true;
-    } else {
-      console.error('Failed to save push subscription');
-      return false;
-    }
+
+    return response.ok;
   } catch (error) {
     console.error('Push registration failed:', error);
     return false;
   }
 }
 
-// Request notification permission
 async function requestNotificationPermission(userId: string) {
-  // Check if browser supports notifications
-  if (!('Notification' in window)) {
-    console.log('This browser does not support notifications');
-    return false;
-  }
-  
-  // Check if we're running as a PWA (installed to home screen)
+  if (!('Notification' in window)) return false;
+
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  
-  console.log('Notification check:', {
-    isStandalone,
-    isIOS,
-    permission: Notification.permission
-  });
-  
-  // On iOS, push only works when installed to home screen
+
   if (isIOS && !isStandalone) {
-    console.log('iOS: App not installed to home screen, push notifications not available');
-    // You could show a prompt here telling users to add to home screen
+    console.log('iOS: App must be installed for push.');
     return false;
   }
-  
-  // Check current permission status
+
   if (Notification.permission === 'granted') {
-    console.log('Notification permission already granted');
     await registerPushSubscription(userId);
     return true;
   }
-  
-  if (Notification.permission === 'denied') {
-    console.log('Notification permission denied');
-    return false;
-  }
-  
-  // Permission is 'default' - need to ask
+
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
-      console.log('Notification permission granted!');
       await registerPushSubscription(userId);
       return true;
-    } else {
-      console.log('Notification permission denied');
-      return false;
     }
   } catch (error) {
-    console.error('Error requesting notification permission:', error);
-    return false;
+    console.error('Permission request error:', error);
   }
+  return false;
 }
 
 export default function App() {
   const [checking, setChecking] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Helper function to check if user has completed onboarding
   const checkProfileCompletion = async (userId: string) => {
     try {
       const { data: profile } = await supabase
@@ -154,102 +125,100 @@ export default function App() {
         .select('date_of_birth')
         .eq('id', userId)
         .single();
-      
       return !!profile?.date_of_birth;
     } catch (error) {
-      console.error('Error checking profile:', error);
       return false;
     }
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const path = window.location.pathname;
-      const onboardingPaths = ['/onboarding', '/signup', '/login'];
-      const isOnboarding = onboardingPaths.some(p => path.startsWith(p));
+    console.log('[App] Initializing auth...');
 
-      // Only redirect to dashboard if they're on the landing page
-      // and have an active session — never interrupt onboarding
-      if (session && path === '/') {
-        router.navigate('/dashboard');
+    // 🔥 THE SAFETY SWITCH: Force "checking" to false after 4 seconds
+    const safetyTimer = setTimeout(() => {
+      if (checking) {
+        console.warn('[App] Safety timeout triggered. Showing app anyway.');
+        setChecking(false);
       }
+    }, 4000);
 
-      setChecking(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (session?.user) {
+          setUser(session.user);
+          // Only redirect if on root
+          if (window.location.pathname === '/') {
+            router.navigate('/dashboard');
+          }
+        }
+        setChecking(false);
+        clearTimeout(safetyTimer);
+      })
+      .catch((err) => {
+        console.error('[App] Auth error:', err);
+        setError(err.message);
+        setChecking(false);
+        clearTimeout(safetyTimer);
+      });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_OUT') {
           router.navigate('/');
           setUser(null);
-          return;
-        }
-        
-        // Set user when signed in
-        if (session?.user) {
+        } else if (session?.user) {
           setUser(session.user);
-          
-          // Check if user has completed onboarding
-          const hasCompletedOnboarding = await checkProfileCompletion(session.user.id);
+          const hasCompleted = await checkProfileCompletion(session.user.id);
           const path = window.location.pathname;
-          const isOnboardingPath = path.startsWith('/onboarding');
-          const isAuthPath = path === '/login' || path === '/signup';
-          
-          // If user hasn't completed onboarding and is not already on an onboarding page,
-          // redirect to welcome
-          if (!hasCompletedOnboarding && !isOnboardingPath && !isAuthPath) {
-            console.log('User has incomplete profile, redirecting to onboarding');
+          if (!hasCompleted && !path.includes('onboarding') && !path.includes('login')) {
             router.navigate('/onboarding/welcome');
           }
-        } else {
-          setUser(null);
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(safetyTimer);
+    };
   }, []);
 
-  // Request notification permission when user is logged in and app is ready
+  // Request notifications after login
   useEffect(() => {
     if (!checking && user) {
-      // Small delay to ensure everything is loaded
-      const timer = setTimeout(() => {
-        requestNotificationPermission(user.id);
-      }, 2000);
-      
+      const timer = setTimeout(() => requestNotificationPermission(user.id), 2000);
       return () => clearTimeout(timer);
     }
   }, [checking, user]);
 
-  // Register service worker
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then(registration => {
-          console.log('Service Worker registered with scope:', registration.scope);
-        })
-        .catch(error => {
-          console.error('Service Worker registration failed:', error);
-        });
-    }
-  }, []);
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0f0a1e] p-4 text-center">
+        <div className="space-y-4">
+          <h1 className="text-xl font-bold text-red-400">Connection Error</h1>
+          <p className="text-white/60 text-sm">{error}</p>
+          <button onClick={() => window.location.reload()} className="px-6 py-2 bg-purple-500 text-white rounded-full">Retry</button>
+        </div>
+      </div>
+    );
+  }
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#0f0a1e]">
+        <div className="text-center space-y-4">
+          <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-purple-300 font-medium">Aligning with the stars...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <UserDataProvider>
-      <RouterProvider router={router} />
-    </UserDataProvider>
+    <ErrorBoundary>
+      <UserDataProvider>
+        <RouterProvider router={router} />
+      </UserDataProvider>
+    </ErrorBoundary>
   );
 }

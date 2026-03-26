@@ -1,4 +1,88 @@
-import webpush from 'web-push';
+
+
+async function sendPushWithOneSignal(env: any, userIds: string[], title: string, body: string, url: string = '/') {
+  try {
+    const response = await fetch('https://onesignal.com/api/v1/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Key ${env.ONESIGNAL_API_KEY}`,
+      },
+      body: JSON.stringify({
+        app_id: env.ONESIGNAL_APP_ID,
+        contents: { en: body },
+        headings: { en: title },
+        include_aliases: {
+          external_id: userIds
+        },
+        target_channel: "web_push",
+        web_url: `https://zodiaccycle.app${url}`,
+        web_buttons: [
+          { id: "open", text: "Open App", url: `https://zodiaccycle.app${url}` }
+        ]
+      })
+    });
+    
+    const result = await response.json();
+    if (response.ok) {
+      console.log(`✅ OneSignal push sent to ${userIds.length} users`);
+    } else {
+      console.error('❌ OneSignal API error:', result);
+    }
+    return result;
+  } catch (error) {
+    console.error('❌ OneSignal push failed:', error);
+    return null;
+  }
+}
+
+// Update sendPush to use OneSignal
+async function sendPush(env: any, subs: any[], title: string, body: string, url: string = '/') {
+  // Get unique user IDs from subscriptions
+  const userIds = [...new Set(subs.map(sub => sub.user_id))];
+  
+  if (userIds.length === 0) {
+    console.log('No user IDs found');
+    return;
+  }
+  
+  console.log(`📤 Sending OneSignal push to ${userIds.length} users`);
+  await sendPushWithOneSignal(env, userIds, title, body, url);
+}
+
+// Keep the deleteSubscription function (no changes needed)
+async function deleteSubscription(env: any, endpoint: string) {
+  try {
+    const response = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(endpoint)}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'apikey': env.SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        },
+      }
+    );
+    if (response.ok) {
+      console.log(`   🗑️ Deleted expired subscription`);
+    }
+  } catch (err) {
+    console.error('   Failed to delete subscription:', err);
+  }
+}
+
+// Keep getUserSubs (no changes)
+async function getUserSubs(env: any, userId: string): Promise<any[]> {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${userId}&select=endpoint,p256dh,auth,user_id`,
+      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+    );
+    return res.ok ? await res.json() : [];
+  } catch { return []; }
+}
+
+
 // ─── Astronomy helpers ────────────────────────────────────────────────────────
 function julianDay(year: number, month: number, day: number, hour: number): number {
   if (month <= 2) { year -= 1; month += 12; }
@@ -283,94 +367,7 @@ async function sendEmail(env: any, to: string, subject: string, html: string): P
     });
     return res.ok;
   } catch { return false; }
-}
-// Add this at the top of your worker file
-
-
-async function sendPush(env: any, subs: any[], title: string, body: string, url: string = '/'): Promise<void> {
-  // Configure web-push with your VAPID keys
-  // Note: The public key needs to be in the worker environment too
-  webpush.setVapidDetails(
-    'mailto:hello@zodiaccycle.app',
-    env.VITE_VAPID_PUBLIC_KEY,  // You need to add this secret
-    env.VAPID_PRIVATE_KEY
-  );
-
-  const payload = JSON.stringify({ 
-    title, 
-    body, 
-    url, 
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png'
-  });
-
-  console.log(`📤 Attempting to send push to ${subs.length} devices using web-push library`);
-
-  for (let i = 0; i < subs.length; i++) {
-    const sub = subs[i];
-    const endpointPreview = sub.endpoint.substring(0, 60) + '...';
-    
-    console.log(`\n📱 Device ${i + 1}: ${endpointPreview}`);
-    console.log(`   Endpoint type: ${sub.endpoint.includes('apple.com') ? '🍎 Apple' : sub.endpoint.includes('windows.com') ? '🪟 Windows' : '🌐 Other'}`);
-    
-    try {
-      // Format subscription for web-push library
-      const pushSubscription = {
-        endpoint: sub.endpoint,
-        keys: {
-          p256dh: sub.p256dh,
-          auth: sub.auth
-        }
-      };
-      
-      const result = await webpush.sendNotification(pushSubscription, payload);
-      console.log(`   ✅ Push sent successfully! Status: ${result.statusCode}`);
-      
-    } catch (err: any) {
-      console.error(`   ❌ Push failed for ${endpointPreview}`);
-      console.error(`   Error: ${err.message}`);
-      
-      if (err.statusCode === 401 || err.statusCode === 403) {
-        console.error(`   🔑 VAPID key issue - check your keys match`);
-      }
-      
-      if (err.statusCode === 410) {
-        console.error(`   ⚠️ Subscription expired, deleting...`);
-        await deleteSubscription(env, sub.endpoint);
-      }
-    }
-  }
-}
-
-async function deleteSubscription(env: any, endpoint: string) {
-  try {
-    const response = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(endpoint)}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'apikey': env.SUPABASE_SERVICE_KEY,
-          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-        },
-      }
-    );
-    if (response.ok) {
-      console.log(`   🗑️ Deleted expired subscription`);
-    }
-  } catch (err) {
-    console.error('   Failed to delete subscription:', err);
-  }
-}
-// ─── Get push subscriptions for a user ───────────────────────────────────────
-async function getUserSubs(env: any, userId: string): Promise<any[]> {
-  try {
-    const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/push_subscriptions?user_id=eq.${userId}&select=endpoint,p256dh,auth`,
-      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
-    );
-    return res.ok ? await res.json() : [];
-  } catch { return []; }
-}
+} 
 
 // ─── Generate short AI insight preview ───────────────────────────────────────
 async function generateInsightPreview(env: any, user: any, cycleDay: number, phase: string): Promise<string> {
@@ -900,32 +897,40 @@ export default {
       }
     }
 
-    // ── Push: Subscribe ────────────────────────────────────────────────────
-    if (path === '/push/subscribe' && request.method === 'POST') {
-      try {
-        const { userId, subscription } = await request.json() as any;
-        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/push_subscriptions`, {
-          method: 'POST',
-          headers: {
-            'apikey': env.SUPABASE_SERVICE_KEY,
-            'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'resolution=merge-duplicates',
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            endpoint: subscription.endpoint,
-            p256dh: subscription.keys.p256dh,
-            auth: subscription.keys.auth,
-          }),
-        });
-        return new Response(JSON.stringify({ ok: res.ok }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: String(err) }), {
-          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
+if (path === '/push/subscribe' && request.method === 'POST') {
+  try {
+    const { userId, subscription } = await request.json() as any;
+    
+    // First save to Supabase (your existing code)
+    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/push_subscriptions`, {
+      method: 'POST',
+      headers: {
+        'apikey': env.SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+      }),
+    });
+    
+    // Also register with OneSignal using their SDK
+    // This is done on the frontend, but we can also do it here
+    // For now, we'll rely on frontend OneSignal registration
+    
+    return new Response(JSON.stringify({ ok: res.ok }), { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+}
 
     // ── Push: Unsubscribe ──────────────────────────────────────────────────
     if (path === '/push/unsubscribe' && request.method === 'POST') {
@@ -1188,6 +1193,7 @@ if (path === '/test-push' && request.method === 'POST') {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
+
 }
     return new Response(JSON.stringify({ error: 'Not found' }), {
       status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
