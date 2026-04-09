@@ -1,13 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '../../lib/supabase';
 
-console.log('[UserDataContext] Module loading');
-
+// ─── Types ────────────────────────────────────────────────────────────────────
 export interface UserData {
   name?: string;
   email?: string;
   stripe_customer_id?: string;
-  dateOfBirth?: string; // ✅ Changed from Date to string (YYYY-MM-DD)
+  dateOfBirth?: string;
   timeOfBirth?: string;
   placeOfBirth?: string;
   birth_lat?: number;
@@ -27,8 +26,8 @@ export interface UserData {
   tracksPeriods?: boolean;
   periodsRegular?: boolean;
   knowsLastPeriod?: boolean;
-  lastPeriodStart?: string; // ✅ Changed from Date to string (YYYY-MM-DD)
-  lastPeriodEnd?: string; // ✅ Changed from Date to string (YYYY-MM-DD)
+  lastPeriodStart?: string;
+  lastPeriodEnd?: string;
   hormonalTracking?: {
     mood?: string; stressLevel?: string; sleepQuality?: string;
     headaches?: boolean; cramps?: boolean; libido?: string;
@@ -47,6 +46,7 @@ export interface UserData {
 
 interface UserDataContextType {
   userData: UserData;
+  user: any;
   updateUserData: (data: Partial<UserData>) => void;
   clearUserData: () => void;
   syncToSupabase: () => Promise<void>;
@@ -55,21 +55,24 @@ interface UserDataContextType {
 
 const UserDataContext = createContext<UserDataContextType | undefined>(undefined);
 
-// ─── Storage helpers ──────────────────────────────────────────────────────────
+// ─── Storage helpers (FIXED: localStorage) ────────────────────────────────────
 function loadFromStorage(): UserData {
   try {
-    const saved = sessionStorage.getItem('zodiac_user_data');
+    const saved = localStorage.getItem('zodiac_user_data');
     if (!saved) return {};
-    const parsed = JSON.parse(saved);
-    return parsed;
-  } catch { return {}; }
+    return JSON.parse(saved);
+  } catch {
+    return {};
+  }
 }
 
 function saveToStorage(data: UserData) {
-  try { sessionStorage.setItem('zodiac_user_data', JSON.stringify(data)); } catch {}
+  try {
+    localStorage.setItem('zodiac_user_data', JSON.stringify(data));
+  } catch {}
 }
 
-// ─── Map UserData → Supabase row ──────────────────────────────────────────────
+// ─── Mapping functions ────────────────────────────────────────────────────────
 function toSupabaseRow(data: UserData) {
   return {
     name: data.name,
@@ -100,7 +103,6 @@ function toSupabaseRow(data: UserData) {
   };
 }
 
-// ─── Map Supabase row → UserData ──────────────────────────────────────────────
 function fromSupabaseRow(row: any): UserData {
   return {
     name: row.name,
@@ -132,10 +134,10 @@ function fromSupabaseRow(row: any): UserData {
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function UserDataProvider({ children }: { children: ReactNode }) {
-  console.log('[UserDataContext] Provider rendering');
   const [userData, setUserData] = useState<UserData>(loadFromStorage);
-  console.log('[UserDataContext] userData state:', userData);
+  const [user, setUser] = useState<any>(null);
 
+  // ─── Load from Supabase ─────────────────────────────────────────────────────
   const loadFromSupabaseInternal = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -146,14 +148,13 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
 
       if (error || !data) return;
 
-      const local = loadFromStorage();
       const remote = fromSupabaseRow(data);
+      const local = loadFromStorage();
 
+      // ✅ Remote wins (important fix)
       const merged: UserData = {
+        ...local,
         ...remote,
-        ...Object.fromEntries(
-          Object.entries(local).filter(([_, v]) => v !== undefined && v !== null)
-        ),
       };
 
       setUserData(merged);
@@ -163,34 +164,42 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // On mount — check if user is already logged in and load their Supabase profile
+  // ─── Init + Auth Listener ───────────────────────────────────────────────────
   useEffect(() => {
-    console.log('[UserDataContext] useEffect - initializing');
     const init = async () => {
-      console.log('[UserDataContext] Getting session...');
       const { data: { session } } = await supabase.auth.getSession();
-      console.log('[UserDataContext] Session:', session ? 'exists' : 'none');
+
       if (session?.user) {
+        setUser(session.user);
         await loadFromSupabaseInternal(session.user.id);
       }
     };
+
     init();
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[UserDataContext] Auth event:', event);
-      if (event === 'SIGNED_IN' && session?.user) {
-        await loadFromSupabaseInternal(session.user.id);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session?.user) {
+          setUser(session.user);
+        } else {
+          setUser(null);
+        }
+
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadFromSupabaseInternal(session.user.id);
+        }
+
+        if (event === 'SIGNED_OUT') {
+          localStorage.removeItem('zodiac_user_data');
+          setUserData({});
+        }
       }
-      if (event === 'SIGNED_OUT') {
-        sessionStorage.removeItem('zodiac_user_data');
-        setUserData({});
-      }
-    });
+    );
 
     return () => subscription.unsubscribe();
   }, []);
 
+  // ─── Sync to Supabase ───────────────────────────────────────────────────────
   const syncToSupabase = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -214,6 +223,7 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
     await loadFromSupabaseInternal(user.id);
   };
 
+  // ─── Update local state ─────────────────────────────────────────────────────
   const updateUserData = (data: Partial<UserData>) => {
     setUserData(prev => {
       const next = { ...prev, ...data };
@@ -223,17 +233,27 @@ export function UserDataProvider({ children }: { children: ReactNode }) {
   };
 
   const clearUserData = () => {
-    sessionStorage.removeItem('zodiac_user_data');
+    localStorage.removeItem('zodiac_user_data');
     setUserData({});
   };
 
   return (
-    <UserDataContext.Provider value={{ userData, updateUserData, clearUserData, syncToSupabase, loadFromSupabase }}>
+    <UserDataContext.Provider
+      value={{
+        userData,
+        user,
+        updateUserData,
+        clearUserData,
+        syncToSupabase,
+        loadFromSupabase,
+      }}
+    >
       {children}
     </UserDataContext.Provider>
   );
 }
 
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useUserData() {
   const context = useContext(UserDataContext);
   if (!context) throw new Error('useUserData must be used within UserDataProvider');

@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { CosmicWrapped } from './CosmicWrapped';
-import { requestPushPermission, unsubscribeFromPush, isPushSubscribed, saveNotificationPreferences } from '../../lib/notifications-push';
+import { saveNotificationPreferences } from '../../lib/notifications.ts';
 
 // ─── Avatar Picker ────────────────────────────────────────────────────────────
 const AVATAR_EMOJIS = [
@@ -136,14 +136,12 @@ function AvatarDisplay({ avatar, name, size = 'lg' }: { avatar: string; name: st
     );
   }
   if (avatar.length <= 4) {
-    // emoji
     return (
       <div className={`${sz} rounded-full glass border-4 border-white/50 shadow-lg flex items-center justify-center`}>
         {avatar}
       </div>
     );
   }
-  // fallback initial
   const initial = name?.[0]?.toUpperCase() || '✦';
   return (
     <div className={`${sz} rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold border-4 border-white/50 shadow-lg`}>
@@ -193,6 +191,7 @@ function EditProfileModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ─── Notification Settings ────────────────────────────────────────────────────
 function NotificationSettings({ onBack }: { onBack: () => void }) {
   const { userData } = useUserData();
   const { t } = useTranslation();
@@ -209,43 +208,97 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // ── Check current OneSignal permission on mount ──
   useEffect(() => {
-    isPushSubscribed().then(subscribed => {
-      if (subscribed) setPushStatus('granted');
+    const OneSignal = (window as any).OneSignal;
+    if (!OneSignal) {
+      // OneSignal not ready yet, fall back to native Notification API
+      if (Notification.permission === 'granted') setPushStatus('granted');
       else if (Notification.permission === 'denied') setPushStatus('denied');
       else setPushStatus('unknown');
-    });
+      return;
+    }
+    const permission = OneSignal.Notifications.permission; // boolean
+    if (permission) setPushStatus('granted');
+    else if (Notification.permission === 'denied') setPushStatus('denied');
+    else setPushStatus('unknown');
   }, []);
 
-  const update = async (key: string, value: any) => {
-    const next = { ...settings, [key]: value };
+ const update = async (key: string, value: any) => {
+  const next = { ...settings, [key]: value };
+
+  // 🧠 AUTO-LOGIC (this is what makes it feel like Flo)
+  if (key === 'frequency') {
+    if (value === 'minimal') {
+      next.dailyInsights = false;
+      next.phaseChange = false;
+      next.transitAlerts = false;
+    }
+
+    if (value === 'weekly') {
+      next.dailyInsights = false;
+    }
+
+    if (value === 'daily') {
+      next.dailyInsights = true;
+    }
+  }
+
+  // If push is OFF → disable everything push-related
+  if (key === 'push' && value === false) {
+    next.periodReminder = false;
+    next.ovulationAlert = false;
+    next.phaseChange = false;
+    next.dailyInsights = false;
+    next.transitAlerts = false;
+  }
+
+  setSettings(next);
+  localStorage.setItem('zodiac_notif_settings', JSON.stringify(next));
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await saveNotificationPreferences(user.id, next);
+  }
+};
+
+  const handleEnablePush = async () => {
+    const OneSignal = (window as any).OneSignal;
+    if (!OneSignal) {
+      alert('Notifications are not available yet. Please refresh and try again.');
+      return;
+    }
+
+    try {
+      const granted = await OneSignal.Notifications.requestPermission();
+      if (granted) {
+        setPushStatus('granted');
+        const next = { ...settings, push: true };
+        setSettings(next);
+        localStorage.setItem('zodiac_notif_settings', JSON.stringify(next));
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) await saveNotificationPreferences(user.id, next);
+      } else {
+        alert('Could not enable push notifications. Make sure notifications are allowed for ZodiacCycle in your iPhone Settings → Notifications.');
+      }
+    } catch (err) {
+      alert('Could not enable push notifications. Make sure notifications are allowed for ZodiacCycle in your iPhone Settings → Notifications.');
+    }
+  };
+
+  const handleDisablePush = async () => {
+    const OneSignal = (window as any).OneSignal;
+    if (OneSignal) {
+      try {
+        await OneSignal.Notifications.setPushNotificationSubscription(false);
+      } catch { /* silent */ }
+    }
+    setPushStatus('unknown');
+    const next = { ...settings, push: false };
     setSettings(next);
     localStorage.setItem('zodiac_notif_settings', JSON.stringify(next));
-
-    // Handle push toggle
-    if (key === 'push') {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      if (value) {
-        const ok = await requestPushPermission(user.id);
-        if (!ok) {
-          setSettings({ ...next, push: false });
-          localStorage.setItem('zodiac_notif_settings', JSON.stringify({ ...next, push: false }));
-          alert('Push notifications blocked. Please enable them in your browser settings.');
-          return;
-        }
-        setPushStatus('granted');
-      } else {
-        await unsubscribeFromPush(user.id);
-        setPushStatus('unknown');
-      }
-    }
-
-    // Save all preferences to Supabase via worker
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await saveNotificationPreferences(user.id, next);
-    }
+    if (user) await saveNotificationPreferences(user.id, next);
   };
 
   const handleSave = async () => {
@@ -259,22 +312,27 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const Toggle = ({ k, label, sub, disabled }: { k: string; label: string; sub?: string; disabled?: boolean }) => (
-    <div className={`flex items-center justify-between py-3 border-b border-white/10 last:border-0 ${disabled ? 'opacity-40' : ''}`}>
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
-      </div>
-      <button
-        disabled={disabled}
-        onClick={() => !disabled && update(k, !settings[k])}
-        className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[k] ? 'bg-primary' : 'bg-border'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-      >
-        <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${settings[k] ? 'left-6' : 'left-0.5'}`}
-          style={{ boxShadow: settings[k] ? '0 0 8px rgba(192,132,252,0.5)' : undefined }} />
-      </button>
+  const Toggle = ({ k, label, sub, disabled }: { 
+  k: keyof typeof settings & string; // Intersection ensures it's a string key
+  label: string; 
+  sub?: string; 
+  disabled?: boolean 
+}) => (
+  <div className={`flex items-center justify-between py-3 border-b border-white/10 last:border-0 ${disabled ? 'opacity-40' : ''}`}>
+    <div>
+      <p className="text-sm font-medium">{label}</p>
+      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
     </div>
-  );
+    <button
+      disabled={disabled}
+      onClick={() => !disabled && update(k, !settings[k])}
+      className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[k] ? 'bg-primary' : 'bg-border'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${settings[k] ? 'left-6' : 'left-0.5'}`}
+        style={{ boxShadow: settings[k] ? '0 0 8px rgba(192,132,252,0.5)' : undefined }} />
+    </button>
+  </div>
+);
 
   return (
     <div className="space-y-4 pb-24">
@@ -289,89 +347,76 @@ function NotificationSettings({ onBack }: { onBack: () => void }) {
       {pushStatus === 'denied' && (
         <div className="glass rounded-2xl p-4 border border-amber-300/50 bg-amber-50/10">
           <p className="text-sm text-amber-400 font-medium">⚠️ Push notifications are blocked</p>
-          <p className="text-xs text-muted-foreground mt-1">Enable them in your browser settings to receive period and ovulation reminders.</p>
+          <p className="text-xs text-muted-foreground mt-1">Enable them in your iPhone Settings → Notifications → ZodiacCycle.</p>
         </div>
       )}
 
-      {/* Push notifications — special handling for iOS */}
-<div className="flex items-center justify-between py-3 border-b border-white/10">
-  <div className="flex items-center gap-3">
-    <div className="w-8 h-8 rounded-xl glass border border-white/30 flex items-center justify-center">
-      <Smartphone className="w-4 h-4 text-primary" />
-    </div>
-    <div>
-      <p className="text-sm font-medium">Push Notifications</p>
-      <p className="text-xs text-muted-foreground">
-        {pushStatus === 'granted' ? '✅ Active on this device' : 'Tap to enable on this device'}
-      </p>
-    </div>
-  </div>
-  {pushStatus === 'granted' ? (
-    <button
-      onClick={() => update('push', false)}
-      className="relative w-12 h-6 rounded-full transition-all duration-300 bg-primary"
-    >
-      <div className="absolute top-0.5 left-6 w-5 h-5 rounded-full bg-white shadow transition-all duration-300" />
-    </button>
-  ) : (
-    <button
-      onClick={async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  alert('User ID: ' + (user?.id || 'NULL - not logged in'));
-  if (!user) return;
-  const ok = await requestPushPermission(user.id);
-        if (ok) {
-          setPushStatus('granted');
-          const next = { ...settings, push: true };
-          setSettings(next);
-          localStorage.setItem('zodiac_notif_settings', JSON.stringify(next));
-        } else {
-          alert('Could not enable push notifications. Make sure notifications are allowed for ZodiacCycle in your iPhone Settings → Notifications.');
-        }
-      }}
-      className="px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold border border-primary/30"
-    >
-      Enable
-    </button>
-  )}
-</div> 
-
-      {/* Delivery channels */}
-    <div className="glass rounded-3xl p-5 border border-white/40">
-  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-4">How to notify you</h3>
-  <div className="space-y-1">
-    {[
-      {
-        k: 'email',
-        icon: <Mail className="w-4 h-4 text-primary" />,
-        label: 'Email Notifications',
-        sub: userData.email || 'Period reminders & daily insights',
-      },
-      {
-        k: 'inApp',
-        icon: <Bell className="w-4 h-4 text-primary" />,
-        label: 'In-App Notifications',
-        sub: 'Bell icon in dashboard',
-      },
-    ].map(item => (
-      <div key={item.k} className="flex items-center justify-between py-3 border-b border-white/10 last:border-0">
+      {/* Push notifications — OneSignal powered */}
+      <div className="flex items-center justify-between py-3 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl glass border border-white/30 flex items-center justify-center">{item.icon}</div>
+          <div className="w-8 h-8 rounded-xl glass border border-white/30 flex items-center justify-center">
+            <Smartphone className="w-4 h-4 text-primary" />
+          </div>
           <div>
-            <p className="text-sm font-medium">{item.label}</p>
-            <p className="text-xs text-muted-foreground">{item.sub}</p>
+            <p className="text-sm font-medium">Push Notifications</p>
+            <p className="text-xs text-muted-foreground">
+              {pushStatus === 'granted' ? '✅ Active on this device' : 'Tap to enable on this device'}
+            </p>
           </div>
         </div>
-        <button
-          onClick={() => update(item.k, !settings[item.k])}
-          className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[item.k] ? 'bg-primary' : 'bg-border'}`}
-        >
-          <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${settings[item.k] ? 'left-6' : 'left-0.5'}`} />
-        </button>
+        {pushStatus === 'granted' ? (
+          <button
+            onClick={handleDisablePush}
+            className="relative w-12 h-6 rounded-full transition-all duration-300 bg-primary"
+          >
+            <div className="absolute top-0.5 left-6 w-5 h-5 rounded-full bg-white shadow transition-all duration-300" />
+          </button>
+        ) : (
+          <button
+            onClick={handleEnablePush}
+            className="px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold border border-primary/30"
+          >
+            Enable
+          </button>
+        )}
       </div>
-    ))}
-  </div>
-</div> 
+
+      {/* Delivery channels */}
+      <div className="glass rounded-3xl p-5 border border-white/40">
+        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-4">How to notify you</h3>
+        <div className="space-y-1">
+          {[
+            {
+              k: 'email',
+              icon: <Mail className="w-4 h-4 text-primary" />,
+              label: 'Email Notifications',
+              sub: userData.email || 'Period reminders & daily insights',
+            },
+            {
+              k: 'inApp',
+              icon: <Bell className="w-4 h-4 text-primary" />,
+              label: 'In-App Notifications',
+              sub: 'Bell icon in dashboard',
+            },
+          ].map(item => (
+            <div key={item.k} className="flex items-center justify-between py-3 border-b border-white/10 last:border-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl glass border border-white/30 flex items-center justify-center">{item.icon}</div>
+                <div>
+                  <p className="text-sm font-medium">{item.label}</p>
+                  <p className="text-xs text-muted-foreground">{item.sub}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => update(item.k, !settings[item.k])}
+                className={`relative w-12 h-6 rounded-full transition-all duration-300 ${settings[item.k] ? 'bg-primary' : 'bg-border'}`}
+              >
+                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-300 ${settings[item.k] ? 'left-6' : 'left-0.5'}`} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* What to notify */}
       <div className="glass rounded-3xl p-5 border border-white/40">
@@ -523,7 +568,7 @@ function InstallAppGuide({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
-} 
+}
 
 // ─── MAIN PROFILE TAB ─────────────────────────────────────────────────────────
 export function ProfileTab() {
@@ -534,13 +579,12 @@ export function ProfileTab() {
   const [view, setView] = useState<'profile' | 'notifications'>('profile');
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
-
   const [avatar, setAvatar] = useState<string>(() =>
     localStorage.getItem('zodiac_avatar') || ''
-  
   );
-const [showInstallGuide, setShowInstallGuide] = useState(false);
-const [showShareCard, setShowShareCard] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [showShareCard, setShowShareCard] = useState(false);
+
   const saveAvatar = (a: string) => {
     setAvatar(a);
     localStorage.setItem('zodiac_avatar', a);
@@ -563,11 +607,9 @@ const [showShareCard, setShowShareCard] = useState(false);
 
       {/* ── Hero avatar card ── */}
       <div className="glass glossy rounded-3xl p-6 border border-white/40 flex flex-col items-center gap-4 relative overflow-hidden">
-        {/* Background decoration */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/10 pointer-events-none"/>
         <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none"/>
 
-        {/* Avatar with edit button */}
         <div className="relative">
           <AvatarDisplay avatar={avatar} name={userData.name || ''} size="lg"/>
           <button onClick={() => setShowAvatarPicker(true)}
@@ -576,7 +618,6 @@ const [showShareCard, setShowShareCard] = useState(false);
           </button>
         </div>
 
-        {/* Name + sign */}
         <div className="text-center relative">
           <p className="text-xl font-bold">{userData.name || 'Starlighter'}</p>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -584,7 +625,6 @@ const [showShareCard, setShowShareCard] = useState(false);
           </p>
         </div>
 
-        {/* Quick stats */}
         <div className="flex gap-3 w-full">
           {[
             { icon: '☀', label: 'Sun', value: userData.sun_sign || '—' },
@@ -599,7 +639,6 @@ const [showShareCard, setShowShareCard] = useState(false);
           ))}
         </div>
 
-        {/* Edit profile button */}
         <button onClick={() => setShowEditProfile(true)}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl glass border border-white/40 text-sm font-semibold text-primary">
           <Edit3 className="w-4 h-4"/> Edit Profile
@@ -607,10 +646,10 @@ const [showShareCard, setShowShareCard] = useState(false);
       </div>
 
       {/* ── Language ── */}
-     <div className="glass rounded-3xl p-5 border border-white/40 space-y-3" style={{ overflow: 'visible' }}>
-  <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t('profile.language')}</h3>
-  <LanguageSelector variant="full"/>
-</div>
+      <div className="glass rounded-3xl p-5 border border-white/40 space-y-3" style={{ overflow: 'visible' }}>
+        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t('profile.language')}</h3>
+        <LanguageSelector variant="full"/>
+      </div>
 
       {/* ── Birth info ── */}
       <div className="glass rounded-3xl p-5 border border-white/40 space-y-3">
@@ -657,13 +696,13 @@ const [showShareCard, setShowShareCard] = useState(false);
             {userData.hasPaid ? t('profile.premium') : t('profile.free')}
           </span>
         </div>
-       {!userData.hasPaid && (
-  <button
-    onClick={() => navigate('/onboarding/paywall')}
-    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold btn-glow">
-    {t('profile.upgrade')} ✦
-  </button>
-)}
+        {!userData.hasPaid && (
+          <button
+            onClick={() => navigate('/onboarding/paywall')}
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-primary to-secondary text-white font-bold btn-glow">
+            {t('profile.upgrade')} ✦
+          </button>
+        )}
       </div>
 
       {/* ── Settings menu ── */}
@@ -676,35 +715,35 @@ const [showShareCard, setShowShareCard] = useState(false);
             action: () => setView('notifications'),
           },
           {
-  icon: <Smartphone className="w-4 h-4 text-primary"/>,
-  label: 'Add to Home Screen',
-  sub: 'Install ZodiacCycle as an app',
-  action: () => setShowInstallGuide(true),
-},
-{
-  icon: <Star className="w-4 h-4 text-primary"/>,
- label: 'Cosmic Wrapped ✨',
-sub: 'Your personalised cosmic story',
-  action: () => setShowShareCard(true),
-},
+            icon: <Smartphone className="w-4 h-4 text-primary"/>,
+            label: 'Add to Home Screen',
+            sub: 'Install ZodiacCycle as an app',
+            action: () => setShowInstallGuide(true),
+          },
           {
-  icon: <Shield className="w-4 h-4 text-primary"/>,
-  label: t('profile.privacy'),
-  sub: 'How we use your data',
-  href: '/privacy.html',
-},
-{
-  icon: <Star className="w-4 h-4 text-primary"/>,
-  label: t('profile.terms'),
-  sub: 'Terms of service',
-  href: '/terms.html',
-},
-{
-  icon: <Heart className="w-4 h-4 text-primary"/>,
-  label: t('profile.contactSupport'),
-  sub: 'Get help or share feedback',
-  href: 'mailto:support@zodiaccycle.app',
-},
+            icon: <Star className="w-4 h-4 text-primary"/>,
+            label: 'Cosmic Wrapped ✨',
+            sub: 'Your personalised cosmic story',
+            action: () => setShowShareCard(true),
+          },
+          {
+            icon: <Shield className="w-4 h-4 text-primary"/>,
+            label: t('profile.privacy'),
+            sub: 'How we use your data',
+            href: '/privacy.html',
+          },
+          {
+            icon: <Star className="w-4 h-4 text-primary"/>,
+            label: t('profile.terms'),
+            sub: 'Terms of service',
+            href: '/terms.html',
+          },
+          {
+            icon: <Heart className="w-4 h-4 text-primary"/>,
+            label: t('profile.contactSupport'),
+            sub: 'Get help or share feedback',
+            href: 'mailto:support@zodiaccycle.app',
+          },
         ].map((item, i) => (
           <div key={item.label}>
             {item.href ? (
@@ -740,16 +779,22 @@ sub: 'Your personalised cosmic story',
       </button>
 
       <p className="text-center text-xs text-muted-foreground pb-2">{t('profile.version')}</p>
+
       {showShareCard && (
-  <CosmicWrapped onClose={() => setShowShareCard(false)}/>
-)}
-      {/* Modals */}
+        <CosmicWrapped onClose={() => setShowShareCard(false)}/>
+      )}
+
+      {showInstallGuide && (
+        <InstallAppGuide onClose={() => setShowInstallGuide(false)}/>
+      )}
+
       {showAvatarPicker && (
         <AvatarPicker current={avatar} onSelect={saveAvatar} onClose={() => setShowAvatarPicker(false)}/>
       )}
+
       {showEditProfile && (
         <EditProfileModal onClose={() => setShowEditProfile(false)}/>
       )}
     </div>
   );
-}
+} 

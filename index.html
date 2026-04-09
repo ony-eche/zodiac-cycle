@@ -2,40 +2,56 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="Track your menstrual cycle and discover your astrological chart. Daily cosmic insights personalized to your birth chart and cycle phase." />
-    <meta name="theme-color" content="#c084fc" />
     
+    <!-- Viewport -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- SEO -->
+    <meta
+      name="description"
+      content="Track your menstrual cycle and discover your astrological chart. Daily cosmic insights personalized to your birth chart and cycle phase."
+    />
+
+    <!-- Theme -->
+    <meta name="theme-color" content="#ff6b8a" />
+
+    <!-- PWA / Mobile -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ZodiacCycle" />
-    
+
+    <!-- Icons -->
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-icon-180x180.png">
-    
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-icon-180x180.png" />
+
+    <!-- OneSignal (Push Notifications) -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-<script>
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  OneSignalDeferred.push(async function(OneSignal) {
-    await OneSignal.init({
-      appId: "5ed65387-dfdd-48de-b894-66dcf52cd0b6",
-      safari_web_id: "web.onesignal.auto.69055919-4623-4418-97cb-29f03c62586e", // Optional but helps older Macs
-      notifyButton: {
-        enable: false, // We will trigger this manually in the app
-      },
-      allowLocalhostAsSecureOrigin: true,
-    });
-  });
-</script>
-    
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function (OneSignal) {
+        await OneSignal.init({
+          appId: "5ed65387-dfdd-48de-b894-66dcf52cd0b6",
+          safari_web_id: "web.onesignal.auto.69055919-4623-4418-97cb-29f03c62586e",
+          serviceWorkerPath: "/OneSignalSDKWorker.js",
+          serviceWorkerUpdaterPath: "/OneSignalSDKUpdaterWorker.js",
+          allowLocalhostAsSecureOrigin: true,
+          notifyButton: { enable: false },
+        });
+      });
+    </script>
+
+    <!-- Title -->
     <title>ZodiacCycle</title>
 
+    <!-- Styles -->
     <style>
       /* Prevent Stripe iframes from cluttering the UI */
-      body > iframe[src*="stripe"] { display: none !important; }
-      
+      body > iframe[src*="stripe"] {
+        display: none !important;
+      }
+
       /* Smooth font loading */
       @font-face {
         font-family: 'Jua';
@@ -46,14 +62,18 @@
       }
     </style>
 
+    <!-- Google AdSense -->
     <script
       async
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1630059411730326"
       crossorigin="anonymous"
     ></script>
   </head>
+
   <body>
     <div id="root"></div>
+
+    <!-- React App -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

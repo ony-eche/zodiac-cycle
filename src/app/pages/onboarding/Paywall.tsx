@@ -8,6 +8,7 @@ import { detectCurrency, getCurrencyByCountry, type CurrencyInfo } from '../../.
 import { useTranslation } from 'react-i18next';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { supabase } from '../../../lib/supabase';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const PRICE_ID_TRIAL   = import.meta.env.VITE_STRIPE_PRICE_ID_TRIAL;
@@ -129,7 +130,7 @@ function PaymentForm({ onSuccess, onCancel, currency }: {
 // ─── MAIN PAYWALL ─────────────────────────────────────────────────────────────
 export function Paywall() {
   const navigate = useNavigate();
-  const { updateUserData, userData } = useUserData();
+  const { updateUserData, userData, syncToSupabase } = useUserData();
   const { t } = useTranslation();
 
   const [selected, setSelected] = useState<'trial' | 'monthly' | 'free' | null>(null);
@@ -176,8 +177,9 @@ export function Paywall() {
   const handleGetAccess = async () => {
     if (selected === 'free') {
       updateUserData({ hasPaid: false });
-      // For free tier, we still need them to create an account
-      navigate(userData.email ? '/dashboard' : '/signup');
+      await syncToSupabase();
+      // ✅ Go to signup page with Facebook and Google options
+      navigate('/signup', { replace: true });
       return;
     }
     if (!selected || !currency) return;
@@ -210,7 +212,7 @@ export function Paywall() {
     }
   };
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = async () => {
     updateUserData({
       hasPaid: true,
       currency: currency?.code,
@@ -218,14 +220,11 @@ export function Paywall() {
     });
     setShowPaymentForm(false);
     
-    // THE CRITICAL STEP:
-    // If onboarding flow: no email yet -> go to Signup
-    // If existing user: has email -> go to Dashboard
-    if (!userData.email) {
-      navigate('/signup', { replace: true });
-    } else {
-      navigate('/dashboard', { replace: true });
-    }
+    // Sync to Supabase before redirect
+    await syncToSupabase();
+    
+    // ✅ Always go to signup page with Facebook and Google options
+    navigate('/signup', { replace: true });
   }; 
 
   const features = [

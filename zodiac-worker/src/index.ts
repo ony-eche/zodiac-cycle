@@ -410,6 +410,7 @@ async function runMiddayCron(env: any): Promise<void> {
     console.log(`Found ${users.length} users for midday cron`);
 
     for (const user of users) {
+      let sent = false; // 🔥 prevents spam
       console.log(`Processing user ${user.id}: notif_push=${user.notif_push}, email=${user.email}`);
       
       if (!user.email) {
@@ -423,11 +424,12 @@ async function runMiddayCron(env: any): Promise<void> {
       
       console.log(`  Generated notification: "${title}"`);
 
-      if (user.notif_push) {
+     if (!sent && user.notif_push) {
         const subs = await getUserSubs(env, user.id);
         console.log(`  Found ${subs.length} push subscriptions`);
         if (subs.length > 0) {
           await sendPush(env, subs, title, body, '/');
+           sent = true; 
           console.log(`  ✅ Push sent to ${user.id}`);
         } else {
           console.log(`  ⚠️ No push subscriptions found`);
@@ -453,14 +455,18 @@ async function runEveningCron(env: any): Promise<void> {
     const users = await res.json() as any[];
 
     for (const user of users) {
+      let sent = false;
       if (!user.email) continue;
       const cycleDay = getCycleDayForUser(user);
       const phase = getCyclePhase(cycleDay);
       const { title, body } = getEveningNotification(user, phase);
 
-      if (user.notif_push) {
+      if (!sent && user.notif_push) {
         const subs = await getUserSubs(env, user.id);
-        if (subs.length > 0) await sendPush(env, subs, title, body, '/');
+       if (subs.length > 0) {
+  await sendPush(env, subs, title, body, '/');
+  sent = true; 
+}
       }
     }
     console.log('Evening cron done');
@@ -478,14 +484,18 @@ async function runNightCron(env: any): Promise<void> {
     const users = await res.json() as any[];
 
     for (const user of users) {
+      let sent = false;
       if (!user.email) continue;
       const cycleDay = getCycleDayForUser(user);
       const phase = getCyclePhase(cycleDay);
       const { title, body } = getNightNotification(user, phase);
 
-      if (user.notif_push) {
+    if (!sent && user.notif_push) {
         const subs = await getUserSubs(env, user.id);
-        if (subs.length > 0) await sendPush(env, subs, title, body, '/');
+       if (subs.length > 0) {
+  await sendPush(env, subs, title, body, '/');
+  sent = true; 
+}
       }
     }
     console.log('Night cron done');
@@ -503,15 +513,19 @@ async function runWeeklyCron(env: any): Promise<void> {
     const users = await res.json() as any[];
 
     for (const user of users) {
+      let sent = false;
       if (!user.email) continue;
       const cycleDay = getCycleDayForUser(user);
       const phase = getCyclePhase(cycleDay);
       const daysUntil = 28 - cycleDay;
       const { title, body } = getWeeklySummary(user, cycleDay, phase, daysUntil);
 
-      if (user.notif_push) {
+     if (!sent && user.notif_push) {
         const subs = await getUserSubs(env, user.id);
-        if (subs.length > 0) await sendPush(env, subs, title, body, '/');
+        if (subs.length > 0) {
+  await sendPush(env, subs, title, body, '/');
+  sent = true; 
+}
       }
       if (user.notif_email) {
         const html = emailBase(`<div class="card">
@@ -625,27 +639,46 @@ function getCycleDayForUser(user: any): number {
 }
 // ─── Main cron logic ─────────────────────────────────────────────────────────
 async function runDailyCron(env: any): Promise<void> {
-  console.log('Cron starting:', new Date().toISOString());
+  console.log('🧠 Elite AI cron starting:', new Date().toISOString());
+
   try {
     const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/profiles?select=id,email,name,sun_sign,moon_sign,last_period_start,notif_period_reminder,notif_ovulation,notif_phase_change,notif_daily_insights,notif_email,notif_push,has_paid`,
-      { headers: { 'apikey': env.SUPABASE_SERVICE_KEY, 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}` } }
+      `${env.SUPABASE_URL}/rest/v1/profiles?select=id,email,name,sun_sign,moon_sign,last_period_start,notif_period_reminder,notif_ovulation,notif_phase_change,notif_daily_insights,notif_email,notif_push,has_paid,last_notification_sent,last_notification_type`,
+      {
+        headers: {
+          'apikey': env.SUPABASE_SERVICE_KEY,
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`
+        }
+      }
     );
-    if (!res.ok) { console.error('Failed to fetch users'); return; }
+
+    if (!res.ok) {
+      console.error('❌ Failed to fetch users');
+      return;
+    }
+
     const users = await res.json() as any[];
-    console.log(`Processing ${users.length} users`);
+
+    const now = new Date();
+    const hour = now.getUTCHours();
+
+    const isMorning = hour === 8;
+    const isMidday = hour === 15;
+    const isEvening = hour === 18;
+    const isNight = hour === 21;
 
     for (const user of users) {
       if (!user.email) continue;
-      
-      console.log(`\n📱 Processing user: ${user.email}`);
-      console.log(`   - has_paid: ${user.has_paid}`);
-      console.log(`   - notif_push: ${user.notif_push}`);
-      console.log(`   - last_period_start: ${user.last_period_start}`);
-      
+
       const isPremium = user.has_paid === true;
       const hasPeriodData = !!user.last_period_start;
-      
+
+      // ── Anti-spam memory ──
+      const lastSent = user.last_notification_sent ? new Date(user.last_notification_sent) : null;
+      const hoursSinceLast = lastSent ? (now.getTime() - lastSent.getTime()) / 3600000 : 999;
+
+      if (hoursSinceLast < 6) continue; // 🚫 no spam within 6h
+
       let cycleDay = 14;
       let daysUntilNext = 14;
       let currentPhase = 'Luteal';
@@ -653,126 +686,158 @@ async function runDailyCron(env: any): Promise<void> {
 
       if (hasPeriodData) {
         const lastPeriod = new Date(user.last_period_start);
-        const today = new Date();
-        const daysSince = Math.floor((today.getTime() - lastPeriod.getTime()) / 86400000);
+        const daysSince = Math.floor((now.getTime() - lastPeriod.getTime()) / 86400000);
         const cycleLength = 28;
+
         cycleDay = Math.max(1, (daysSince % cycleLength) + 1);
         daysUntilNext = cycleLength - (daysSince % cycleLength);
         currentPhase = getCyclePhase(cycleDay);
         previousPhase = getPreviousCyclePhase(cycleDay);
-        
-        console.log(`   - daysSince: ${daysSince}`);
-        console.log(`   - cycleDay: ${cycleDay}`);
-        console.log(`   - daysUntilNext: ${daysUntilNext}`);
-        console.log(`   - currentPhase: ${currentPhase}`);
-        console.log(`   - previousPhase: ${previousPhase}`);
-      } else {
-        console.log(`   - ⚠️ No period data!`);
       }
 
-      console.log(`\n   📋 Checking notifications:`);
-      
-      // Period reminder check
-      if (user.notif_period_reminder && hasPeriodData && daysUntilNext === 3) {
-        console.log(`   ✅ Would send PERIOD REMINDER`);
-        
-        if (user.notif_email) {
-          await sendEmail(env, user.email, '🔴 Your period is coming in 3 days',
-            periodReminderEmail(user.name, 3, currentPhase, user.sun_sign || 'Unknown'));
-        }
-        if (user.notif_push) {
-          const subs = await getUserSubs(env, user.id);
-          if (subs.length > 0) {
-            await sendPush(env, subs, '🔴 Period reminder', 'Your period is expected in 3 days', '/');
-          }
-        }
-      } else if (user.notif_period_reminder && hasPeriodData) {
-        console.log(`   ❌ Period reminder: daysUntilNext=${daysUntilNext} (need 3)`);
+      const emotionalPhase = currentPhase === 'Luteal' || currentPhase === 'Menstrual';
+      const options: any[] = [];
+
+      // ─────────────────────────
+      // 🔴 PERIOD REMINDER
+      // ─────────────────────────
+      if (user.notif_period_reminder && hasPeriodData && daysUntilNext <= 2) {
+        options.push({
+          type: 'period',
+          priority: 100,
+          title: `🔴 Your period is near`,
+          body: daysUntilNext === 0
+            ? 'It may have started — log it to stay accurate'
+            : `Expected in ${daysUntilNext} day${daysUntilNext > 1 ? 's' : ''}`,
+        });
       }
-      
-      // Ovulation check
-      if (user.notif_ovulation && hasPeriodData && (cycleDay === 9 || cycleDay === 10)) {
-        console.log(`   ✅ Would send OVULATION ALERT`);
-        
-        if (user.notif_email) {
-          await sendEmail(env, user.email, '🌿 Your fertile window is starting',
-            ovulationEmail(user.name, user.sun_sign || 'Unknown', user.moon_sign || 'Unknown'));
-        }
-        if (user.notif_push) {
-          const subs = await getUserSubs(env, user.id);
-          if (subs.length > 0) {
-            await sendPush(env, subs, '🌿 Fertile window', 'Your fertile window is starting today', '/');
-          }
-        }
-      } else if (user.notif_ovulation && hasPeriodData) {
-        console.log(`   ❌ Ovulation: cycleDay=${cycleDay} (need 9 or 10)`);
+
+      // ─────────────────────────
+      // 🌿 OVULATION
+      // ─────────────────────────
+      if (user.notif_ovulation && hasPeriodData && (cycleDay >= 9 && cycleDay <= 11)) {
+        options.push({
+          type: 'ovulation',
+          priority: 90,
+          title: '🌿 Your energy is peaking',
+          body: 'This is your fertile window — confidence & energy are highest',
+        });
       }
-      
-      // Phase change check
-      if (isPremium && user.notif_phase_change && hasPeriodData && currentPhase !== previousPhase) {
-        console.log(`   ✅ Would send PHASE CHANGE (${previousPhase} → ${currentPhase})`);
-        
-        const tip = PHASE_TIPS[currentPhase] || '';
-        if (user.notif_email) {
-          await sendEmail(env, user.email, `✨ You've entered your ${currentPhase} Phase`,
-            phaseChangeEmail(user.name, currentPhase, user.sun_sign || 'Unknown', tip));
-        }
-        if (user.notif_push) {
-          const subs = await getUserSubs(env, user.id);
-          if (subs.length > 0) {
-            const phaseEmojis: Record<string, string> = { Menstrual: '🔴', Follicular: '🌸', Ovulation: '⭐', Luteal: '🌙' };
-            await sendPush(env, subs, `${phaseEmojis[currentPhase] || '✨'} New phase: ${currentPhase}`, tip.slice(0, 80), '/');
-          }
-        }
-      } else if (isPremium && user.notif_phase_change && hasPeriodData) {
-        console.log(`   ❌ Phase change: phases are same (${currentPhase})`);
-      } else if (!isPremium) {
-        console.log(`   ❌ Phase change: requires premium (has_paid=false)`);
+
+      // ─────────────────────────
+      // ✨ PHASE CHANGE
+      // ─────────────────────────
+      if (isPremium && user.notif_phase_change && currentPhase !== previousPhase) {
+        options.push({
+          type: 'phase',
+          priority: 85,
+          title: `✨ ${currentPhase} phase started`,
+          body: PHASE_TIPS[currentPhase]?.slice(0, 90) || '',
+        });
       }
-      
-      // Daily insight (premium only)
+
+      // ─────────────────────────
+      // 🔮 DAILY INSIGHT (adaptive)
+      // ─────────────────────────
       if (isPremium && user.notif_daily_insights) {
-        console.log(`   🔮 Generating daily insight for ${user.email}`);
-        
-        try {
-          const preview = await generateInsightPreview(env, user, cycleDay, currentPhase);
-          console.log(`   📝 Insight generated: "${preview.substring(0, 50)}..."`);
-          
-          if (user.notif_email) {
-            console.log(`   📧 Attempting to send email to ${user.email}`);
-            await sendEmail(env, user.email,
-              `✨ Your cosmic insight for today, ${user.name || 'Starlighter'}`,
-              dailyInsightEmail(user.name, currentPhase, cycleDay, user.sun_sign || 'Unknown', preview));
-            console.log(`   ✅ Email sent`);
-          }
-          
-          if (user.notif_push) {
-            console.log(`   📱 Attempting to send push notification`);
-            const subs = await getUserSubs(env, user.id);
-            console.log(`   📱 Found ${subs.length} push subscriptions`);
-            
-            if (subs.length > 0) {
-              await sendPush(env, subs, '🔮 Your daily cosmic insight', preview.slice(0, 100), '/');
-              console.log(`   ✅ Push notification sent!`);
-            } else {
-              console.log(`   ⚠️ No push subscriptions found for user ${user.id}`);
-            }
-          }
-        } catch (error) {
-          console.error(`   ❌ Error sending daily insight:`, error);
-        }
-      } else if (isPremium) {
-        console.log(`   ❌ Daily insight: notif_daily_insights is false`);
-      } else {
-        console.log(`   ❌ Daily insight: requires premium (has_paid=false)`);
+        const preview = await generateInsightPreview(env, user, cycleDay, currentPhase);
+
+        options.push({
+          type: 'insight',
+          priority: emotionalPhase ? 80 : 60,
+          title: emotionalPhase
+            ? '💭 A gentle message for you'
+            : '🔮 Your daily insight',
+          body: preview.slice(0, 100),
+        });
       }
-    } // ← This closes the for loop
-    
-    console.log('Cron completed successfully');
+
+      // ─────────────────────────
+      // 📝 LOG SYMPTOMS (NEW — NIGHT ONLY)
+      // ─────────────────────────
+      if (isNight && hasPeriodData) {
+        options.push({
+          type: 'log',
+          priority: emotionalPhase ? 75 : 65,
+          title: '📝 Log how you feel today',
+          body: emotionalPhase
+            ? 'Tracking your symptoms helps you understand your emotions better'
+            : 'Takes 10 seconds — future you will thank you',
+        });
+      }
+
+      // ─────────────────────────
+      // 🌌 TRANSITS
+      // ─────────────────────────
+      const transitCount = countActiveTransits(user);
+
+      if (user.notif_push && transitCount >= 3) {
+        options.push({
+          type: 'transit',
+          priority: 50 + transitCount * 5,
+          title: `✨ ${transitCount} active cosmic influences`,
+          body: 'Something meaningful is shifting in your chart',
+        });
+      }
+
+      // ─────────────────────────
+      // ⏰ TIME-BASED FILTER
+      // ─────────────────────────
+      let allowed: string[] = [];
+
+      if (isMorning) allowed = ['insight', 'phase'];
+      if (isMidday) allowed = ['transit'];
+      if (isEvening) allowed = ['period', 'ovulation'];
+      if (isNight) allowed = ['log', 'insight'];
+
+      const filtered = options.filter(o => allowed.includes(o.type));
+
+      if (filtered.length === 0) continue;
+
+      // ─────────────────────────
+      // 🧠 SMART SCORING
+      // ─────────────────────────
+      filtered.sort((a, b) => b.priority - a.priority);
+
+      const final = filtered[0];
+
+      // 🎲 human-like randomness (avoid robotic feel)
+      if (Math.random() < 0.15) continue;
+
+      // ─────────────────────────
+      // 🚀 SEND
+      // ─────────────────────────
+      if (user.notif_push) {
+        const subs = await getUserSubs(env, user.id);
+
+        if (subs.length > 0) {
+          await sendPush(env, subs, final.title, final.body, '/');
+
+          console.log(`✅ Sent ${final.type} to ${user.id}`);
+
+          // 🧠 SAVE MEMORY
+          await fetch(`${env.SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}`, {
+            method: 'PATCH',
+            headers: {
+              'apikey': env.SUPABASE_SERVICE_KEY,
+              'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              last_notification_sent: new Date().toISOString(),
+              last_notification_type: final.type
+            })
+          });
+        }
+      }
+    }
+
+    console.log('✨ Elite cron completed');
+
   } catch (err) {
-    console.error('Cron error:', err);
+    console.error('❌ Cron error:', err);
   }
-} // ← This closes the runDailyCron function
+}
 
 // ─── Main worker ──────────────────────────────────────────────────────────────
 export default {

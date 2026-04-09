@@ -80,10 +80,25 @@ export default function App() {
 
   useEffect(() => {
     if (!checking && user) {
-      const OneSignal = (window as any).OneSignal;
-      if (OneSignal) {
-        OneSignal.login(user.id);
-      }
+      // Use the Deferred push pattern to ensure OneSignal is initialized first
+      const OneSignalDeferred = (window as any).OneSignalDeferred || [];
+      
+      OneSignalDeferred.push(async (OneSignal: any) => {
+        try {
+          // 1. Wait for the Service Worker to actually be ready/active
+          if ('serviceWorker' in navigator) {
+            await navigator.serviceWorker.ready;
+          }
+
+          // 2. Now it is safe to associate the user ID
+          await OneSignal.login(user.id);
+          console.log("OneSignal: User logged in successfully");
+          
+        } catch (err) {
+          // This prevents the popup error from breaking the app flow
+          console.error("OneSignal Login Error:", err);
+        }
+      });
     }
   }, [checking, user]);
 
